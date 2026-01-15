@@ -143,7 +143,6 @@ function Login({ onLogin }) {
         }}>
           <strong style={{ display: 'block', marginBottom: '8px' }}>Default Accounts:</strong>
                     <div style={{ marginTop: '8px', fontSize: '11px', fontStyle: 'italic' }}>
-        
           </div>
         </div>
       </div>
