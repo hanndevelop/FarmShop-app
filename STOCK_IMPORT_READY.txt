@@ -1,0 +1,94 @@
+Unnamed: 0	Stock item	Stock code	Stock cost price	Stock sell price	Warning stock level
+1	ACE/Kloof KOFFIE				
+2	Afval Bees				
+3	Afval Skaap				
+4	Appelkooskonf				
+5	Auto Waspoeier				
+6	Bakpoeier 50g				
+7	BB 25g				
+8	Bene				
+9	Besem sag				
+10	Blades Manora				
+11	Boks Typek Papier				
+12	Boontjies				
+13	Boxer 25g				
+14	Brood				
+15	Broodmeel 2.5kg				
+16	Broodmeel 5kg				
+17	Bruin asyn 750ml				
+18	Bruismeel 500g				
+19	BULB indruk				
+20	Chakalaka				
+21	CHUTNEY ms balls				
+22	DB NUGGET				
+23	DISH WASH 400ml				
+24	DOMESTOS				
+25	DOOM				
+26	DrinkoPop				
+27	Ellis Brown/cremora				
+28	Engels sout 14g				
+29	Ertjies				
+30	Grand Pa'12				
+31	Groenseep 125/250g				
+32	Haarlemensies				
+33	Handy Andy 750ML				
+34	Hardedraad				
+35	Imana 100g/ander soya				
+36	Jik 750 ml				
+37	Juice				
+38	Kamerseep				
+39	Kerse 1				
+40	Kookolie				
+41	Lewensessens				
+42	Lewer en niertjies				
+43	Macaroni				
+44	MANS SPRAY				
+45	Maziena				
+46	Mieilemeel 1kg				
+47	MIERGIF				
+48	Mop				
+49	Nugget LB				
+50	Nugget SWART				
+51	Nugget TR				
+52	Oros				
+53	Pads				
+54	Patties				
+55	PBUTTER 400G				
+56	Peper 7g				
+57	R/O Man				
+58	R/O Vrou				
+59	Ricoffee 250G				
+60	RICOFFY 100G				
+61	Rooibos Tee 20'S				
+62	Rys 1kg				
+63	Salami				
+64	Samp				
+65	Savanna				
+66	Skoenborsel				
+67	SODA				
+68	Sout Ityva				
+69	SPAGETTI				
+70	SUIKER 1KG				
+71	SUIKER 2.5kg				
+72	Suurdeeg Anchor				
+73	Tandeborsel				
+74	Tandepasta				
+75	Tee Gewoon2.5g				
+76	Toilet papier Dinu 2ply				
+77	Toiletrol 1 PLY				
+78	Tsous OK 750ml				
+79	Vasalien 50ml/100ml				
+80	VICKS 10g				
+81	Vis Tamatie				
+82	Vla 125g				
+83	Vleis Bees				
+84	Vleis Skaap				
+85	Vleis Vark				
+86	Voete poeier				
+87	Vrou spray				
+88	Vuurhoutjies				
+89	Waspoeier 500g				
+90	Wors				
+91	Worscestersous				
+92	Zumbuk 7g				
+93					
