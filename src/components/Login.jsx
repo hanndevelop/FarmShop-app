@@ -143,7 +143,7 @@ function Login({ onLogin }) {
         }}>
           <strong style={{ display: 'block', marginBottom: '8px' }}>Default Accounts:</strong>
                     <div style={{ marginTop: '8px', fontSize: '11px', fontStyle: 'italic' }}>
-            Change these in Login.jsx file
+        
           </div>
         </div>
       </div>
