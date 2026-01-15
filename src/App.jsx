@@ -23,7 +23,7 @@ function App() {
   const [receipts, setReceipts] = useState([]);
 
   // Google Apps Script configuration
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzH655R4RPj1JddUjUwQvy8zXhUd278arD59mZDXOzlkoDw3jtxW78jKLat2t80kDEu/exec'; // Replace with your deployed Web App URL
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzWMts4MQFUhFGzgBT1R9IxrVOnFg0e6DS72QXApJg/dev'; // Replace with your deployed Web App URL
   
   // NOTE: You don't need Google Cloud Console or API Keys anymore!
   // Just deploy the Apps Script and paste the URL above
