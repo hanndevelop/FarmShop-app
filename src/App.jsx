@@ -22,12 +22,9 @@ function App() {
   const [stocktakes, setStocktakes] = useState([]);
   const [receipts, setReceipts] = useState([]);
 
-  // Google Apps Script configuration
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyvskbBTqOJJRNExu6qi7JS9cAe_UrsPs7kF2xt6rXgc7ZAVZCrSnue01A8OpYgM-T8/exec';
+  // Google Apps Script configuration - UPDATE THIS URL!
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz2-cKcB7WZEgxgbOH4HY7mE4Aw0bDrHFQ0zl-K3HyXoPJP3d95_eKWR5wDQDm7oNft/exec';
   
-  // NOTE: You don't need Google Cloud Console or API Keys anymore!
-  // Just deploy the Apps Script and paste the URL above
-
   // Check for saved login session
   useEffect(() => {
     const savedUser = localStorage.getItem('farmShopUser');
@@ -85,87 +82,99 @@ function App() {
     setActiveTab('dashboard');
   };
 
+  // Load data from Google Sheets using JSONP (avoids CORS)
+  const loadFromSheets = (sheetName) => {
+    return new Promise((resolve, reject) => {
+      const callbackName = 'jsonpCallback' + Date.now();
+      
+      // Create callback function
+      window[callbackName] = (data) => {
+        delete window[callbackName];
+        document.body.removeChild(script);
+        resolve(data);
+      };
+      
+      // Create script tag
+      const script = document.createElement('script');
+      script.src = `${APPS_SCRIPT_URL}?action=read&sheet=${sheetName}&callback=${callbackName}`;
+      script.onerror = () => {
+        delete window[callbackName];
+        document.body.removeChild(script);
+        reject(new Error('Failed to load from ' + sheetName));
+      };
+      
+      document.body.appendChild(script);
+    });
+  };
+
   // Load all data from Google Sheets
   const loadAllData = async () => {
     try {
-      console.log('Loading data from Google Sheets...');
+      console.log('Loading data from Google Sheets using JSONP...');
       
       // Load workers
-      const workersData = await loadFromSheets('Workers');
-      if (workersData && workersData.length > 0) {
-        setWorkers(workersData);
-        console.log('Loaded workers:', workersData.length);
-      } else {
-        // Load sample data if sheet is empty
-        setWorkers([
-          { id: 1, name: 'Johannes Mkhize', idNumber: '7801015800082', farmId: 'W001' },
-          { id: 2, name: 'Sarah Dlamini', idNumber: '8505129800083', farmId: 'W002' },
-        ]);
+      try {
+        const workersResult = await loadFromSheets('Workers');
+        if (workersResult.status === 'success' && workersResult.data.length > 0) {
+          setWorkers(workersResult.data);
+          console.log('✅ Loaded workers:', workersResult.data.length);
+        } else {
+          loadSampleWorkers();
+        }
+      } catch (error) {
+        console.error('Error loading workers:', error);
+        loadSampleWorkers();
       }
 
       // Load stock
-      const stockDataFromSheets = await loadFromSheets('Stock_Master');
-      if (stockDataFromSheets && stockDataFromSheets.length > 0) {
-        setStockData(stockDataFromSheets);
-        console.log('Loaded stock items:', stockDataFromSheets.length);
-      } else {
-        // Load sample data if sheet is empty
-        setStockData([
-          { id: 1, name: 'Maize Meal 5kg', category: 'Groceries', costPrice: 45, sellPrice: 65, quantity: 20, minQuantity: 5 },
-          { id: 2, name: 'Sugar 2.5kg', category: 'Groceries', costPrice: 28, sellPrice: 40, quantity: 15, minQuantity: 5 },
-        ]);
+      try {
+        const stockResult = await loadFromSheets('Stock_Master');
+        if (stockResult.status === 'success' && stockResult.data.length > 0) {
+          setStockData(stockResult.data);
+          console.log('✅ Loaded stock items:', stockResult.data.length);
+        } else {
+          loadSampleStock();
+        }
+      } catch (error) {
+        console.error('Error loading stock:', error);
+        loadSampleStock();
       }
 
       // Load transactions
-      const transactionsData = await loadFromSheets('Transactions');
-      if (transactionsData && transactionsData.length > 0) {
-        setTransactions(transactionsData);
-        console.log('Loaded transactions:', transactionsData.length);
+      try {
+        const transactionsResult = await loadFromSheets('Transactions');
+        if (transactionsResult.status === 'success') {
+          setTransactions(transactionsResult.data);
+          console.log('✅ Loaded transactions:', transactionsResult.data.length);
+        }
+      } catch (error) {
+        console.error('Error loading transactions:', error);
       }
 
       // Load stocktakes
-      const stocktakesData = await loadFromSheets('Stocktakes');
-      if (stocktakesData && stocktakesData.length > 0) {
-        setStocktakes(stocktakesData);
-        console.log('Loaded stocktakes:', stocktakesData.length);
+      try {
+        const stocktakesResult = await loadFromSheets('Stocktakes');
+        if (stocktakesResult.status === 'success') {
+          setStocktakes(stocktakesResult.data);
+          console.log('✅ Loaded stocktakes:', stocktakesResult.data.length);
+        }
+      } catch (error) {
+        console.error('Error loading stocktakes:', error);
       }
 
     } catch (error) {
       console.error('Error loading data from sheets:', error);
-      // Load sample data if there's an error
       loadSampleData();
     }
   };
 
-  // Load data from a specific sheet
-  const loadFromSheets = async (sheetName) => {
-    try {
-      const response = await fetch(`${APPS_SCRIPT_URL}?action=read&sheet=${sheetName}`);
-      const result = await response.json();
-      
-      if (result.status === 'success') {
-        console.log(`Successfully loaded from ${sheetName}:`, result.data);
-        return result.data;
-      } else {
-        console.error(`Error loading from ${sheetName}:`, result.message);
-        return [];
-      }
-    } catch (error) {
-      console.error(`Error fetching ${sheetName}:`, error);
-      return [];
-    }
-  };
-
-  // Save data to Google Sheets
+  // Save data to Google Sheets using POST (works for writing)
   const saveToSheets = async (sheetName, data) => {
     try {
-      console.log(`Saving to ${sheetName}:`, data.length, 'items');
+      console.log(`💾 Saving to ${sheetName}:`, data.length, 'items');
       
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           action: 'write',
           sheet: sheetName,
@@ -184,26 +193,35 @@ function App() {
       return result;
     } catch (error) {
       console.error(`Error saving to ${sheetName}:`, error);
+      // Save to localStorage as backup
+      localStorage.setItem(`farmShop_${sheetName}`, JSON.stringify(data));
+      console.log(`💾 Saved to localStorage as backup`);
     }
   };
 
-  // Load sample data (fallback)
-  const loadSampleData = () => {
-    console.log('Loading sample data...');
-    
-    setStockData([
-      { id: 1, name: 'Maize Meal 5kg', category: 'Groceries', costPrice: 45, sellPrice: 65, quantity: 20, minQuantity: 5 },
-      { id: 2, name: 'Sugar 2.5kg', category: 'Groceries', costPrice: 28, sellPrice: 40, quantity: 15, minQuantity: 5 },
-      { id: 3, name: 'Cooking Oil 750ml', category: 'Groceries', costPrice: 22, sellPrice: 35, quantity: 12, minQuantity: 5 },
-      { id: 4, name: 'Toilet Paper 9s', category: 'Household', costPrice: 18, sellPrice: 28, quantity: 8, minQuantity: 5 },
-      { id: 5, name: 'Bar Soap', category: 'Toiletries', costPrice: 8, sellPrice: 12, quantity: 25, minQuantity: 10 },
-    ]);
-
+  // Load sample workers
+  const loadSampleWorkers = () => {
+    console.log('Loading sample workers...');
     setWorkers([
       { id: 1, name: 'Johannes Mkhize', idNumber: '7801015800082', farmId: 'W001' },
       { id: 2, name: 'Sarah Dlamini', idNumber: '8505129800083', farmId: 'W002' },
     ]);
+  };
 
+  // Load sample stock
+  const loadSampleStock = () => {
+    console.log('Loading sample stock...');
+    setStockData([
+      { id: 1, name: 'Maize Meal 5kg', category: 'Groceries', costPrice: 45, sellPrice: 65, quantity: 20, minQuantity: 5 },
+      { id: 2, name: 'Sugar 2.5kg', category: 'Groceries', costPrice: 28, sellPrice: 40, quantity: 15, minQuantity: 5 },
+    ]);
+  };
+
+  // Load sample data (fallback)
+  const loadSampleData = () => {
+    console.log('Loading all sample data...');
+    loadSampleWorkers();
+    loadSampleStock();
     setTransactions([]);
     setStocktakes([]);
   };
