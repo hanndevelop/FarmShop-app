@@ -178,40 +178,84 @@ function StockManagement({ stockData, setStockData }) {
     reader.onload = (e) => {
       try {
         const text = e.target.result;
-        const lines = text.split('\n');
-        const headers = lines[0].split('\t');
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        if (lines.length < 2) {
+          alert('File must have headers and at least one item');
+          return;
+        }
+
+        // Check if it's comma or tab delimited
+        const firstLine = lines[0];
+        const delimiter = firstLine.includes('\t') ? '\t' : ',';
+        
+        const headers = lines[0].toLowerCase().split(delimiter).map(h => h.trim());
+        console.log('Headers found:', headers);
         
         const importedItems = [];
+        const errors = [];
+        
         for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split('\t');
-          if (values.length > 1 && values[1]?.trim()) {
-            const name = values[1].trim();
-            const costPrice = parseFloat(values[2]) || 0;
-            const quantity = parseInt(values[3]) || 0;
-            
-            const sellPrice = costPrice > 0 ? parseFloat((costPrice * 1.26).toFixed(2)) : 0;
-            
-            importedItems.push({
-              id: Date.now() + i,
-              name: name,
-              stockCode: values[0]?.trim() || '',
-              category: '',
-              costPrice: costPrice,
-              sellPrice: sellPrice,
-              quantity: quantity,
-              minQuantity: 5
-            });
+          const values = lines[i].split(delimiter).map(v => v.trim());
+          
+          // Map columns by header name (flexible mapping)
+          const getColumn = (possibleNames) => {
+            for (let name of possibleNames) {
+              const index = headers.indexOf(name.toLowerCase());
+              if (index !== -1) return values[index];
+            }
+            return '';
+          };
+          
+          const stockCode = getColumn(['id', 'stockcode', 'code', 'stock_code']);
+          const name = getColumn(['name', 'item', 'description', 'product']);
+          const category = getColumn(['category', 'cat']);
+          const costPrice = parseFloat(getColumn(['costprice', 'cost_price', 'cost', 'costPrice'])) || 0;
+          const quantity = parseInt(getColumn(['quantity', 'qty', 'stock'])) || 0;
+          const minQuantity = parseInt(getColumn(['minquantity', 'min_quantity', 'minQuantity', 'min'])) || 5;
+          
+          // Skip if no name
+          if (!name) {
+            errors.push(`Row ${i + 1}: No name found`);
+            continue;
           }
+          
+          // Auto-calculate sell price with 26% margin
+          const sellPrice = costPrice > 0 ? parseFloat((costPrice * 1.26).toFixed(2)) : 0;
+          
+          importedItems.push({
+            id: Date.now() + i,
+            name: name,
+            stockCode: stockCode || '',
+            category: category || '',
+            costPrice: costPrice,
+            sellPrice: sellPrice,
+            quantity: quantity,
+            minQuantity: minQuantity
+          });
         }
         
         if (importedItems.length > 0) {
           setStockData([...stockData, ...importedItems]);
-          alert(`Successfully imported ${importedItems.length} items!\n\nRemember to set categories for each item.`);
+          
+          const summary = `✅ Successfully imported ${importedItems.length} items!\n\n` +
+                         `📊 Summary:\n` +
+                         `- Items with cost price: ${importedItems.filter(i => i.costPrice > 0).length}\n` +
+                         `- Items with stock: ${importedItems.filter(i => i.quantity > 0).length}\n` +
+                         `- Items with category: ${importedItems.filter(i => i.category).length}\n\n` +
+                         `💡 Sell prices auto-calculated at Cost + 26%\n` +
+                         `${errors.length > 0 ? `\n⚠️ ${errors.length} rows skipped` : ''}`;
+          
+          alert(summary);
         } else {
-          alert('No items found in file');
+          alert('No items found in file.\n\nMake sure the file has these columns:\n- id or stockCode\n- name\n- costPrice\n- quantity (optional)');
+        }
+        
+        if (errors.length > 0) {
+          console.log('Import errors:', errors);
         }
       } catch (error) {
-        alert('Error reading file. Make sure it\'s tab-delimited with format:\nStockCode\\tName\\tCostPrice\\tQuantity');
+        alert('Error reading file: ' + error.message + '\n\nSupported formats:\n- Comma delimited (CSV)\n- Tab delimited (TSV)\n\nYour file should have headers: id,name,category,costPrice,quantity');
       }
     };
     reader.readAsText(file);
