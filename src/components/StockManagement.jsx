@@ -178,7 +178,8 @@ function StockManagement({ stockData, setStockData }) {
     reader.onload = (e) => {
       try {
         const text = e.target.result;
-        const lines = text.split('\n').filter(line => line.trim());
+        // Handle both Windows (\r\n) and Unix (\n) line endings
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
         
         if (lines.length < 2) {
           alert('File must have headers and at least one item');
@@ -190,19 +191,26 @@ function StockManagement({ stockData, setStockData }) {
         const delimiter = firstLine.includes('\t') ? '\t' : ',';
         
         const headers = lines[0].toLowerCase().split(delimiter).map(h => h.trim());
-        console.log('Headers found:', headers);
+        console.log('Found ' + headers.length + ' columns:', headers);
         
         const importedItems = [];
         const errors = [];
         
         for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(delimiter).map(v => v.trim());
+          const line = lines[i].trim();
+          if (!line) continue; // Skip empty lines
+          
+          const values = line.split(delimiter).map(v => v.trim());
+          
+          console.log('Row ' + (i+1) + ':', values);
           
           // Map columns by header name (flexible mapping)
           const getColumn = (possibleNames) => {
             for (let name of possibleNames) {
               const index = headers.indexOf(name.toLowerCase());
-              if (index !== -1) return values[index];
+              if (index !== -1 && values[index]) {
+                return values[index];
+              }
             }
             return '';
           };
@@ -210,9 +218,13 @@ function StockManagement({ stockData, setStockData }) {
           const stockCode = getColumn(['id', 'stockcode', 'code', 'stock_code']);
           const name = getColumn(['name', 'item', 'description', 'product']);
           const category = getColumn(['category', 'cat']);
-          const costPrice = parseFloat(getColumn(['costprice', 'cost_price', 'cost', 'costPrice'])) || 0;
-          const quantity = parseInt(getColumn(['quantity', 'qty', 'stock'])) || 0;
-          const minQuantity = parseInt(getColumn(['minquantity', 'min_quantity', 'minQuantity', 'min'])) || 5;
+          const costPriceStr = getColumn(['costprice', 'cost_price', 'cost', 'costPrice']);
+          const quantityStr = getColumn(['quantity', 'qty', 'stock']);
+          const minQuantityStr = getColumn(['minquantity', 'min_quantity', 'minQuantity', 'min']);
+          
+          const costPrice = parseFloat(costPriceStr) || 0;
+          const quantity = parseInt(quantityStr) || 0;
+          const minQuantity = parseInt(minQuantityStr) || 5;
           
           // Skip if no name
           if (!name) {
@@ -235,27 +247,34 @@ function StockManagement({ stockData, setStockData }) {
           });
         }
         
+        console.log('Successfully parsed ' + importedItems.length + ' items');
+        
         if (importedItems.length > 0) {
           setStockData([...stockData, ...importedItems]);
           
+          const withCost = importedItems.filter(i => i.costPrice > 0).length;
+          const withStock = importedItems.filter(i => i.quantity > 0).length;
+          const withCategory = importedItems.filter(i => i.category).length;
+          
           const summary = `✅ Successfully imported ${importedItems.length} items!\n\n` +
                          `📊 Summary:\n` +
-                         `- Items with cost price: ${importedItems.filter(i => i.costPrice > 0).length}\n` +
-                         `- Items with stock: ${importedItems.filter(i => i.quantity > 0).length}\n` +
-                         `- Items with category: ${importedItems.filter(i => i.category).length}\n\n` +
+                         `- Items with cost price: ${withCost}\n` +
+                         `- Items with stock: ${withStock}\n` +
+                         `- Items with category: ${withCategory}\n\n` +
                          `💡 Sell prices auto-calculated at Cost + 26%\n` +
-                         `${errors.length > 0 ? `\n⚠️ ${errors.length} rows skipped` : ''}`;
+                         `${errors.length > 0 ? `\n⚠️ ${errors.length} rows skipped (check console)` : ''}`;
           
           alert(summary);
         } else {
-          alert('No items found in file.\n\nMake sure the file has these columns:\n- id or stockCode\n- name\n- costPrice\n- quantity (optional)');
+          alert('❌ No items found in file.\n\nPossible issues:\n- File might be empty\n- Column names don\'t match\n\nExpected columns:\n- id (or stockCode)\n- name\n- costPrice\n- quantity\n\nFound columns:\n' + headers.join(', '));
         }
         
         if (errors.length > 0) {
           console.log('Import errors:', errors);
         }
       } catch (error) {
-        alert('Error reading file: ' + error.message + '\n\nSupported formats:\n- Comma delimited (CSV)\n- Tab delimited (TSV)\n\nYour file should have headers: id,name,category,costPrice,quantity');
+        console.error('Import error:', error);
+        alert('❌ Error reading file: ' + error.message + '\n\nSupported formats:\n- Comma delimited (CSV)\n- Tab delimited (TSV)\n\nMake sure file has headers in first row!');
       }
     };
     reader.readAsText(file);
