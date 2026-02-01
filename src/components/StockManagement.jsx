@@ -1,117 +1,182 @@
 import React, { useState } from 'react';
-import { Plus, Package, X, Edit, Upload } from 'lucide-react';
+import { Plus, Edit, X, Upload, Package, Download } from 'lucide-react';
+
+// Helper function to export to Excel (CSV format)
+const exportToExcel = (data, filename) => {
+  if (!data || data.length === 0) {
+    alert('No data to export');
+    return;
+  }
+
+  const headers = Object.keys(data[0]);
+  const csv = [
+    headers.join(','),
+    ...data.map(row => 
+      headers.map(header => {
+        const value = row[header];
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(',')
+    )
+  ].join('\n');
+
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
 function StockManagement({ stockData, setStockData }) {
-  const [showAddItem, setShowAddItem] = useState(false);
+  const [showAddStock, setShowAddStock] = useState(false);
   const [showReceiveStock, setShowReceiveStock] = useState(false);
-  const [showEditItem, setShowEditItem] = useState(false);
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
+  const [editingStock, setEditingStock] = useState(null);
   
-  const [newItem, setNewItem] = useState({
+  const [stockForm, setStockForm] = useState({
     name: '',
     stockCode: '',
     category: '',
-    costPrice: '',
-    sellPrice: '',
-    quantity: '',
-    minQuantity: ''
+    costPrice: 0,
+    sellPrice: 0,
+    quantity: 0,
+    minQuantity: 5
   });
 
-  const [editItem, setEditItem] = useState({
-    id: null,
-    name: '',
-    stockCode: '',
-    category: '',
-    costPrice: '',
-    sellPrice: '',
-    quantity: '',
-    minQuantity: ''
-  });
-
-  const [receiveData, setReceiveData] = useState({
-    quantity: '',
+  const [receiveForm, setReceiveForm] = useState({
+    itemId: '',
+    quantity: 0,
     date: new Date().toISOString().split('T')[0]
-  });
-
-  const [quickAddData, setQuickAddData] = useState({
-    itemId: null,
-    quantity: ''
   });
 
   const categories = ['Groceries', 'Toiletries', 'Household', 'Clothing', 'Other'];
 
-  const handleAddItem = () => {
-    if (!newItem.name || !newItem.category || !newItem.sellPrice || !newItem.quantity || !newItem.minQuantity) {
-      alert('Please fill in required fields: name, category, sell price, quantity, and minimum quantity');
-      return;
-    }
-
-    const item = {
-      id: Date.now(),
-      name: newItem.name,
-      stockCode: newItem.stockCode,
-      category: newItem.category,
-      costPrice: newItem.costPrice ? parseFloat(newItem.costPrice) : 0,
-      sellPrice: parseFloat(newItem.sellPrice),
-      quantity: parseInt(newItem.quantity),
-      minQuantity: parseInt(newItem.minQuantity)
-    };
-
-    setStockData([...stockData, item]);
-    setNewItem({ name: '', stockCode: '', category: '', costPrice: '', sellPrice: '', quantity: '', minQuantity: '' });
-    setShowAddItem(false);
+  const handleExportStock = () => {
+    const exportData = stockData.map(item => ({
+      'Stock Code': item.stockCode || '',
+      'Name': item.name,
+      'Category': item.category,
+      'Cost Price': 'R ' + (item.costPrice || 0).toFixed(2),
+      'Sell Price': 'R ' + (item.sellPrice || 0).toFixed(2),
+      'Margin %': calculateMargin(item.costPrice, item.sellPrice) + '%',
+      'Quantity': item.quantity,
+      'Min Quantity': item.minQuantity,
+      'Status': item.quantity < 5 ? 'Out of Stock' : item.quantity <= 10 ? 'Low Stock' : 'OK'
+    }));
+    
+    exportToExcel(exportData, 'Stock_List');
   };
 
-  const handleEditItem = () => {
-    if (!editItem.name || !editItem.category || !editItem.sellPrice || !editItem.minQuantity) {
-      alert('Please fill in required fields');
+  const handleAddStock = () => {
+    if (!stockForm.name || !stockForm.category) {
+      alert('Please fill in at least name and category');
       return;
     }
 
-    const updatedStock = stockData.map(item => {
-      if (item.id === editItem.id) {
-        return {
-          ...item,
-          name: editItem.name,
-          stockCode: editItem.stockCode,
-          category: editItem.category,
-          costPrice: editItem.costPrice ? parseFloat(editItem.costPrice) : 0,
-          sellPrice: parseFloat(editItem.sellPrice),
-          quantity: parseInt(editItem.quantity),
-          minQuantity: parseInt(editItem.minQuantity)
-        };
-      }
-      return item;
+    const newItem = {
+      id: Date.now(),
+      ...stockForm
+    };
+
+    setStockData([...stockData, newItem]);
+    setStockForm({
+      name: '',
+      stockCode: '',
+      category: '',
+      costPrice: 0,
+      sellPrice: 0,
+      quantity: 0,
+      minQuantity: 5
     });
+    setShowAddStock(false);
+  };
+
+  const handleEditStock = () => {
+    if (!stockForm.name || !stockForm.category) {
+      alert('Please fill in at least name and category');
+      return;
+    }
+
+    const updatedStock = stockData.map(item =>
+      item.id === editingStock.id
+        ? { ...item, ...stockForm }
+        : item
+    );
 
     setStockData(updatedStock);
-    setEditItem({ id: null, name: '', stockCode: '', category: '', costPrice: '', sellPrice: '', quantity: '', minQuantity: '' });
-    setShowEditItem(false);
+    setStockForm({
+      name: '',
+      stockCode: '',
+      category: '',
+      costPrice: 0,
+      sellPrice: 0,
+      quantity: 0,
+      minQuantity: 5
+    });
+    setEditingStock(null);
   };
 
   const openEditModal = (item) => {
-    setEditItem({
-      id: item.id,
+    setEditingStock(item);
+    setStockForm({
       name: item.name,
       stockCode: item.stockCode || '',
       category: item.category,
-      costPrice: item.costPrice || '',
-      sellPrice: item.sellPrice || item.price,
+      costPrice: item.costPrice || 0,
+      sellPrice: item.sellPrice || 0,
       quantity: item.quantity,
-      minQuantity: item.minQuantity
+      minQuantity: item.minQuantity || 5
     });
-    setShowEditItem(true);
   };
 
-  const handleImportExcel = (event) => {
+  const handleReceiveStock = () => {
+    if (!receiveForm.itemId || receiveForm.quantity <= 0) {
+      alert('Please select item and enter valid quantity');
+      return;
+    }
+
+    const updatedStock = stockData.map(item =>
+      item.id === parseInt(receiveForm.itemId)
+        ? { ...item, quantity: item.quantity + receiveForm.quantity }
+        : item
+    );
+
+    setStockData(updatedStock);
+    setReceiveForm({
+      itemId: '',
+      quantity: 0,
+      date: new Date().toISOString().split('T')[0]
+    });
+    setShowReceiveStock(false);
+    alert('Stock received successfully!');
+  };
+
+  const handleQuickAddStock = (item) => {
+    const quantity = prompt(`Add stock for ${item.name}.\nEnter quantity to add:`, '10');
+    if (quantity && !isNaN(quantity) && parseInt(quantity) > 0) {
+      const updatedStock = stockData.map(i =>
+        i.id === item.id
+          ? { ...i, quantity: i.quantity + parseInt(quantity) }
+          : i
+      );
+      setStockData(updatedStock);
+      alert(`Added ${quantity} units to ${item.name}`);
+    }
+  };
+
+  const handleImportCSV = (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        // Simple CSV/TSV parsing for Excel export
         const text = e.target.result;
         const lines = text.split('\n');
         const headers = lines[0].split('\t');
@@ -120,81 +185,95 @@ function StockManagement({ stockData, setStockData }) {
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split('\t');
           if (values.length > 1 && values[1]?.trim()) {
-            const itemName = values[1].trim();
-            if (itemName && itemName !== 'nan') {
-              importedItems.push({
-                id: Date.now() + i,
-                name: itemName,
-                stockCode: values[2]?.trim() || '',
-                category: 'Other', // Default category, can be changed later
-                costPrice: values[3] ? parseFloat(values[3]) : 0,
-                sellPrice: values[4] ? parseFloat(values[4]) : 0,
-                quantity: 0, // Start with 0, will be updated when stock is received
-                minQuantity: values[5] ? parseInt(values[5]) : 5
-              });
-            }
+            const name = values[1].trim();
+            const costPrice = parseFloat(values[2]) || 0;
+            const quantity = parseInt(values[3]) || 0;
+            
+            const sellPrice = costPrice > 0 ? parseFloat((costPrice * 1.26).toFixed(2)) : 0;
+            
+            importedItems.push({
+              id: Date.now() + i,
+              name: name,
+              stockCode: values[0]?.trim() || '',
+              category: '',
+              costPrice: costPrice,
+              sellPrice: sellPrice,
+              quantity: quantity,
+              minQuantity: 5
+            });
           }
         }
         
         if (importedItems.length > 0) {
           setStockData([...stockData, ...importedItems]);
-          alert(`Successfully imported ${importedItems.length} items!`);
+          alert(`Successfully imported ${importedItems.length} items!\n\nRemember to set categories for each item.`);
         } else {
-          alert('No items found in the file');
+          alert('No items found in file');
         }
       } catch (error) {
-        alert('Error reading file. Please make sure it\'s a valid Excel file exported as Tab-delimited text.');
+        alert('Error reading file. Make sure it\'s tab-delimited with format:\nStockCode\\tName\\tCostPrice\\tQuantity');
       }
     };
     reader.readAsText(file);
   };
 
-  const handleReceiveStock = () => {
-    if (!receiveData.quantity || !selectedItem) {
-      alert('Please fill in all fields');
-      return;
-    }
+  const handleBulkReceiveStock = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-    const updatedStock = stockData.map(item => {
-      if (item.id === selectedItem.id) {
-        return {
-          ...item,
-          quantity: item.quantity + parseInt(receiveData.quantity)
-        };
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        if (lines.length < 2) {
+          alert('CSV file must have headers and at least one item\n\nFormat:\nitem_name,quantity_to_add');
+          return;
+        }
+
+        let updatedCount = 0;
+        const errors = [];
+        let updatedStock = [...stockData];
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim());
+          const itemName = values[0];
+          const quantityToAdd = parseInt(values[1]) || 0;
+
+          if (!itemName || quantityToAdd <= 0) {
+            errors.push(`Row ${i + 1}: Invalid data`);
+            continue;
+          }
+
+          const itemIndex = updatedStock.findIndex(item => 
+            item.name.toLowerCase() === itemName.toLowerCase() ||
+            (item.stockCode && item.stockCode.toLowerCase() === itemName.toLowerCase())
+          );
+
+          if (itemIndex !== -1) {
+            updatedStock[itemIndex] = {
+              ...updatedStock[itemIndex],
+              quantity: updatedStock[itemIndex].quantity + quantityToAdd
+            };
+            updatedCount++;
+          } else {
+            errors.push(`Row ${i + 1}: Item "${itemName}" not found`);
+          }
+        }
+
+        setStockData(updatedStock);
+
+        if (errors.length > 0) {
+          alert(`✅ Updated ${updatedCount} items.\n\n⚠️ Errors:\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? '\n...' : ''}`);
+        } else {
+          alert(`✅ Successfully added stock to ${updatedCount} items!`);
+        }
+      } catch (error) {
+        alert('Error reading file.\n\nExpected format:\nitem_name,quantity\nMaize Meal 5kg,20\nSugar 2.5kg,15');
       }
-      return item;
-    });
-
-    setStockData(updatedStock);
-    setReceiveData({ quantity: '', date: new Date().toISOString().split('T')[0] });
-    setSelectedItem(null);
-    setShowReceiveStock(false);
-  };
-
-  const openQuickAdd = (item) => {
-    setQuickAddData({ itemId: item.id, quantity: '' });
-    setShowQuickAdd(true);
-  };
-
-  const handleQuickAdd = () => {
-    if (!quickAddData.quantity || quickAddData.quantity <= 0) {
-      alert('Please enter a valid quantity');
-      return;
-    }
-
-    const updatedStock = stockData.map(item => {
-      if (item.id === quickAddData.itemId) {
-        return {
-          ...item,
-          quantity: item.quantity + parseInt(quickAddData.quantity)
-        };
-      }
-      return item;
-    });
-
-    setStockData(updatedStock);
-    setQuickAddData({ itemId: null, quantity: '' });
-    setShowQuickAdd(false);
+    };
+    reader.readAsText(file);
   };
 
   const getStockStatus = (item) => {
@@ -206,105 +285,133 @@ function StockManagement({ stockData, setStockData }) {
     return <span className="badge badge-ok">OK</span>;
   };
 
+  const calculateMargin = (cost, sell) => {
+    if (cost === 0) return 0;
+    return ((sell - cost) / cost * 100).toFixed(1);
+  };
+
   return (
     <div>
       <div className="page-header">
         <h2>Stock Management</h2>
-        <p>Manage your inventory and receive stock</p>
+        <p>Manage your inventory</p>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        <button className="btn btn-primary" onClick={() => setShowAddItem(true)}>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <button 
+          className="btn btn-primary"
+          onClick={() => setShowAddStock(true)}
+        >
           <Plus size={20} />
-          Add New Item
+          Add Stock Item
         </button>
-        <button className="btn btn-secondary" onClick={() => setShowReceiveStock(true)}>
-          <Package size={20} />
-          Receive Stock
-        </button>
+
         <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
           <Upload size={20} />
-          Import Excel
+          Import Items (CSV)
           <input
             type="file"
-            accept=".xlsx,.xls,.csv,.txt"
-            onChange={handleImportExcel}
+            accept=".csv,.txt,.tsv"
+            onChange={handleImportCSV}
             style={{ display: 'none' }}
           />
         </label>
+
+        <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+          <Package size={20} />
+          Bulk Receive Stock (CSV)
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleBulkReceiveStock}
+            style={{ display: 'none' }}
+          />
+        </label>
+
+        <button 
+          className="btn btn-secondary"
+          onClick={() => setShowReceiveStock(true)}
+        >
+          <Plus size={20} />
+          Receive Stock
+        </button>
+
+        <button 
+          className="btn btn-secondary"
+          onClick={handleExportStock}
+          disabled={stockData.length === 0}
+        >
+          <Download size={20} />
+          Export Stock to Excel
+        </button>
       </div>
 
       <div className="card">
         <div className="card-header">
-          <h3>Current Stock</h3>
+          <h3>All Stock Items ({stockData.length})</h3>
         </div>
         <div className="table-container">
           <table>
             <thead>
               <tr>
-                <th>Item Name</th>
                 <th>Stock Code</th>
+                <th>Name</th>
                 <th>Category</th>
                 <th>Cost Price</th>
                 <th>Sell Price</th>
                 <th>Margin</th>
                 <th>Quantity</th>
-                <th>Min Qty</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {stockData.map(item => {
-                const sellPrice = item.sellPrice || item.price;
-                const costPrice = item.costPrice || 0;
-                const margin = sellPrice > 0 && costPrice > 0 ? ((sellPrice - costPrice) / sellPrice * 100).toFixed(1) : '-';
-                return (
-                  <tr key={item.id}>
-                    <td>{item.name}</td>
-                    <td>{item.stockCode || '-'}</td>
-                    <td>{item.category}</td>
-                    <td>R {costPrice.toFixed(2)}</td>
-                    <td>R {sellPrice.toFixed(2)}</td>
-                    <td>{margin !== '-' ? `${margin}%` : '-'}</td>
-                    <td>{item.quantity}</td>
-                    <td>{item.minQuantity}</td>
-                    <td>{getStockStatus(item)}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button 
-                          className="btn btn-primary"
-                          onClick={() => openQuickAdd(item)}
-                          style={{ padding: '6px 12px' }}
-                          title="Quick add stock"
-                        >
-                          <Plus size={16} />
-                        </button>
-                        <button 
-                          className="btn btn-secondary"
-                          onClick={() => openEditModal(item)}
-                          style={{ padding: '6px 12px' }}
-                          title="Edit item"
-                        >
-                          <Edit size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {stockData.map(item => (
+                <tr key={item.id}>
+                  <td>{item.stockCode || '-'}</td>
+                  <td>{item.name}</td>
+                  <td>{item.category}</td>
+                  <td>R {(item.costPrice || 0).toFixed(2)}</td>
+                  <td>R {(item.sellPrice || 0).toFixed(2)}</td>
+                  <td>{calculateMargin(item.costPrice, item.sellPrice)}%</td>
+                  <td>{item.quantity}</td>
+                  <td>{getStockStatus(item)}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => openEditModal(item)}
+                        style={{ padding: '6px 12px' }}
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleQuickAddStock(item)}
+                        style={{ padding: '6px 12px', backgroundColor: '#8bc34a' }}
+                        title="Quick add stock"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Add New Item Modal */}
-      {showAddItem && (
+      {/* Add Stock Modal */}
+      {showAddStock && (
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
               <h3>Add New Stock Item</h3>
-              <button className="btn btn-secondary" onClick={() => setShowAddItem(false)}>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowAddStock(false)}
+              >
                 <X size={20} />
               </button>
             </div>
@@ -313,95 +420,212 @@ function StockManagement({ stockData, setStockData }) {
               <label>Item Name *</label>
               <input
                 type="text"
-                value={newItem.name}
-                onChange={(e) => setNewItem({...newItem, name: e.target.value})}
-                placeholder="e.g., Maize Meal 12.5kg"
+                value={stockForm.name}
+                onChange={(e) => setStockForm({...stockForm, name: e.target.value})}
+                placeholder="e.g., Maize Meal 5kg"
               />
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Stock Code</label>
-                <input
-                  type="text"
-                  value={newItem.stockCode}
-                  onChange={(e) => setNewItem({...newItem, stockCode: e.target.value})}
-                  placeholder="Optional"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Category *</label>
-                <select
-                  value={newItem.category}
-                  onChange={(e) => setNewItem({...newItem, category: e.target.value})}
-                >
-                  <option value="">Select category</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="form-group">
+              <label>Stock Code</label>
+              <input
+                type="text"
+                value={stockForm.stockCode}
+                onChange={(e) => setStockForm({...stockForm, stockCode: e.target.value})}
+                placeholder="e.g., MM5KG"
+              />
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Cost Price (R)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={newItem.costPrice}
-                  onChange={(e) => setNewItem({...newItem, costPrice: e.target.value})}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Sell Price (R) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={newItem.sellPrice}
-                  onChange={(e) => setNewItem({...newItem, sellPrice: e.target.value})}
-                  placeholder="0.00"
-                />
-              </div>
+            <div className="form-group">
+              <label>Category *</label>
+              <select
+                value={stockForm.category}
+                onChange={(e) => setStockForm({...stockForm, category: e.target.value})}
+              >
+                <option value="">Select category</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
 
-            {newItem.costPrice && newItem.sellPrice && (
-              <div className="alert alert-info" style={{ marginBottom: '16px' }}>
-                Profit Margin: {((parseFloat(newItem.sellPrice) - parseFloat(newItem.costPrice)) / parseFloat(newItem.sellPrice) * 100).toFixed(1)}%
-              </div>
-            )}
+            <div className="form-group">
+              <label>Cost Price *</label>
+              <input
+                type="number"
+                value={stockForm.costPrice}
+                onChange={(e) => {
+                  const cost = parseFloat(e.target.value) || 0;
+                  const sell = cost > 0 ? parseFloat((cost * 1.26).toFixed(2)) : 0;
+                  setStockForm({
+                    ...stockForm, 
+                    costPrice: cost,
+                    sellPrice: sell
+                  });
+                }}
+                placeholder="e.g., 45.00"
+                step="0.01"
+              />
+            </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Initial Quantity *</label>
-                <input
-                  type="number"
-                  value={newItem.quantity}
-                  onChange={(e) => setNewItem({...newItem, quantity: e.target.value})}
-                  placeholder="0"
-                />
-              </div>
+            <div className="form-group">
+              <label>Sell Price * (Auto: Cost + 26%)</label>
+              <input
+                type="number"
+                value={stockForm.sellPrice}
+                onChange={(e) => setStockForm({...stockForm, sellPrice: parseFloat(e.target.value) || 0})}
+                placeholder="Auto-calculated from cost"
+                step="0.01"
+              />
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Current margin: {calculateMargin(stockForm.costPrice, stockForm.sellPrice)}%
+              </small>
+            </div>
 
-              <div className="form-group">
-                <label>Minimum Quantity *</label>
-                <input
-                  type="number"
-                  value={newItem.minQuantity}
-                  onChange={(e) => setNewItem({...newItem, minQuantity: e.target.value})}
-                  placeholder="0"
-                />
-              </div>
+            <div className="form-group">
+              <label>Initial Quantity</label>
+              <input
+                type="number"
+                value={stockForm.quantity}
+                onChange={(e) => setStockForm({...stockForm, quantity: parseInt(e.target.value) || 0})}
+                placeholder="0"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Minimum Quantity Alert</label>
+              <input
+                type="number"
+                value={stockForm.minQuantity}
+                onChange={(e) => setStockForm({...stockForm, minQuantity: parseInt(e.target.value) || 5})}
+                placeholder="5"
+              />
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowAddItem(false)}>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowAddStock(false)}
+              >
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleAddItem}>
+              <button 
+                className="btn btn-primary"
+                onClick={handleAddStock}
+              >
                 Add Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Stock Modal */}
+      {editingStock && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>Edit Stock Item</h3>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setEditingStock(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="form-group">
+              <label>Item Name *</label>
+              <input
+                type="text"
+                value={stockForm.name}
+                onChange={(e) => setStockForm({...stockForm, name: e.target.value})}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Stock Code</label>
+              <input
+                type="text"
+                value={stockForm.stockCode}
+                onChange={(e) => setStockForm({...stockForm, stockCode: e.target.value})}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Category *</label>
+              <select
+                value={stockForm.category}
+                onChange={(e) => setStockForm({...stockForm, category: e.target.value})}
+              >
+                <option value="">Select category</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Cost Price *</label>
+              <input
+                type="number"
+                value={stockForm.costPrice}
+                onChange={(e) => {
+                  const cost = parseFloat(e.target.value) || 0;
+                  const sell = cost > 0 ? parseFloat((cost * 1.26).toFixed(2)) : 0;
+                  setStockForm({
+                    ...stockForm, 
+                    costPrice: cost,
+                    sellPrice: sell
+                  });
+                }}
+                step="0.01"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Sell Price * (Auto: Cost + 26%)</label>
+              <input
+                type="number"
+                value={stockForm.sellPrice}
+                onChange={(e) => setStockForm({...stockForm, sellPrice: parseFloat(e.target.value) || 0})}
+                step="0.01"
+              />
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Current margin: {calculateMargin(stockForm.costPrice, stockForm.sellPrice)}%
+              </small>
+            </div>
+
+            <div className="form-group">
+              <label>Current Quantity</label>
+              <input
+                type="number"
+                value={stockForm.quantity}
+                onChange={(e) => setStockForm({...stockForm, quantity: parseInt(e.target.value) || 0})}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Minimum Quantity Alert</label>
+              <input
+                type="number"
+                value={stockForm.minQuantity}
+                onChange={(e) => setStockForm({...stockForm, minQuantity: parseInt(e.target.value) || 5})}
+              />
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setEditingStock(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleEditStock}
+              >
+                Save Changes
               </button>
             </div>
           </div>
@@ -414,21 +638,21 @@ function StockManagement({ stockData, setStockData }) {
           <div className="modal">
             <div className="modal-header">
               <h3>Receive Stock</h3>
-              <button className="btn btn-secondary" onClick={() => setShowReceiveStock(false)}>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowReceiveStock(false)}
+              >
                 <X size={20} />
               </button>
             </div>
 
             <div className="form-group">
-              <label>Select Item</label>
+              <label>Select Item *</label>
               <select
-                value={selectedItem?.id || ''}
-                onChange={(e) => {
-                  const item = stockData.find(i => i.id === parseInt(e.target.value));
-                  setSelectedItem(item);
-                }}
+                value={receiveForm.itemId}
+                onChange={(e) => setReceiveForm({...receiveForm, itemId: e.target.value})}
               >
-                <option value="">Select an item</option>
+                <option value="">Choose item</option>
                 {stockData.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name} (Current: {item.quantity})
@@ -437,201 +661,38 @@ function StockManagement({ stockData, setStockData }) {
               </select>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Quantity Received</label>
-                <input
-                  type="number"
-                  value={receiveData.quantity}
-                  onChange={(e) => setReceiveData({...receiveData, quantity: e.target.value})}
-                  placeholder="0"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Date Received</label>
-                <input
-                  type="date"
-                  value={receiveData.date}
-                  onChange={(e) => setReceiveData({...receiveData, date: e.target.value})}
-                />
-              </div>
-            </div>
-
-            {selectedItem && receiveData.quantity && (
-              <div className="alert alert-info">
-                New quantity will be: {selectedItem.quantity + parseInt(receiveData.quantity)}
-              </div>
-            )}
-
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowReceiveStock(false)}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={handleReceiveStock}>
-                Receive Stock
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Item Modal */}
-      {showEditItem && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h3>Edit Stock Item</h3>
-              <button className="btn btn-secondary" onClick={() => setShowEditItem(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
             <div className="form-group">
-              <label>Item Name *</label>
+              <label>Quantity Received *</label>
               <input
-                type="text"
-                value={editItem.name}
-                onChange={(e) => setEditItem({...editItem, name: e.target.value})}
+                type="number"
+                value={receiveForm.quantity}
+                onChange={(e) => setReceiveForm({...receiveForm, quantity: parseInt(e.target.value) || 0})}
+                placeholder="Enter quantity"
+                min="1"
               />
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Stock Code</label>
-                <input
-                  type="text"
-                  value={editItem.stockCode}
-                  onChange={(e) => setEditItem({...editItem, stockCode: e.target.value})}
-                  placeholder="Optional"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Category *</label>
-                <select
-                  value={editItem.category}
-                  onChange={(e) => setEditItem({...editItem, category: e.target.value})}
-                >
-                  <option value="">Select category</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label>Cost Price (R)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editItem.costPrice}
-                  onChange={(e) => setEditItem({...editItem, costPrice: e.target.value})}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Sell Price (R) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editItem.sellPrice}
-                  onChange={(e) => setEditItem({...editItem, sellPrice: e.target.value})}
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            {editItem.costPrice && editItem.sellPrice && (
-              <div className="alert alert-info" style={{ marginBottom: '16px' }}>
-                Profit Margin: {((parseFloat(editItem.sellPrice) - parseFloat(editItem.costPrice)) / parseFloat(editItem.sellPrice) * 100).toFixed(1)}%
-              </div>
-            )}
-
-            <div className="form-row">
-              <div className="form-group">
-                <label>Current Quantity *</label>
-                <input
-                  type="number"
-                  value={editItem.quantity}
-                  onChange={(e) => setEditItem({...editItem, quantity: e.target.value})}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Minimum Quantity *</label>
-                <input
-                  type="number"
-                  value={editItem.minQuantity}
-                  onChange={(e) => setEditItem({...editItem, minQuantity: e.target.value})}
-                />
-              </div>
+            <div className="form-group">
+              <label>Date Received</label>
+              <input
+                type="date"
+                value={receiveForm.date}
+                onChange={(e) => setReceiveForm({...receiveForm, date: e.target.value})}
+              />
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowEditItem(false)}>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowReceiveStock(false)}
+              >
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleEditItem}>
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Add Stock Modal */}
-      {showQuickAdd && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: '400px' }}>
-            <div className="modal-header">
-              <h3>Quick Add Stock</h3>
-              <button className="btn btn-secondary" onClick={() => setShowQuickAdd(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {quickAddData.itemId && (
-              <>
-                <div className="alert alert-info" style={{ marginBottom: '20px' }}>
-                  <Package size={20} />
-                  <div>
-                    <strong>{stockData.find(i => i.id === quickAddData.itemId)?.name}</strong>
-                    <div style={{ fontSize: '14px' }}>
-                      Current stock: {stockData.find(i => i.id === quickAddData.itemId)?.quantity}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Quantity to Add</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={quickAddData.quantity}
-                    onChange={(e) => setQuickAddData({...quickAddData, quantity: e.target.value})}
-                    placeholder="Enter quantity"
-                    autoFocus
-                  />
-                </div>
-
-                {quickAddData.quantity && (
-                  <div className="alert alert-success">
-                    New stock will be: {stockData.find(i => i.id === quickAddData.itemId)?.quantity + parseInt(quickAddData.quantity)}
-                  </div>
-                )}
-              </>
-            )}
-
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowQuickAdd(false)}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={handleQuickAdd}>
-                Add Stock
+              <button 
+                className="btn btn-primary"
+                onClick={handleReceiveStock}
+              >
+                Receive Stock
               </button>
             </div>
           </div>

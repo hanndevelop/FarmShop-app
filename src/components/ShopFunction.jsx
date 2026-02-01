@@ -1,57 +1,72 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Plus, Trash2, User } from 'lucide-react';
+import { Plus, X, ShoppingCart, User, Search, Calendar } from 'lucide-react';
 
 function ShopFunction({ stockData, workers, setTransactions }) {
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [cart, setCart] = useState([]);
-  const [showItemSelect, setShowItemSelect] = useState(false);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const selectWorker = (worker) => {
+    setSelectedWorker(worker);
+    setCart([]);
+  };
 
   const addToCart = (item) => {
-    const existingItem = cart.find(cartItem => cartItem.id === item.id);
+    const existingItem = cart.find(i => i.id === item.id);
     
     if (existingItem) {
-      setCart(cart.map(cartItem => 
-        cartItem.id === item.id 
-          ? {...cartItem, quantity: cartItem.quantity + 1}
-          : cartItem
-      ));
+      const updatedCart = cart.map(i =>
+        i.id === item.id
+          ? { ...i, quantity: i.quantity + 1, total: (i.quantity + 1) * i.price }
+          : i
+      );
+      setCart(updatedCart);
     } else {
-      const price = item.sellPrice || item.price;
-      setCart([...cart, { ...item, price, quantity: 1 }]);
+      setCart([...cart, {
+        id: item.id,
+        name: item.name,
+        price: item.sellPrice,
+        quantity: 1,
+        total: item.sellPrice
+      }]);
     }
-    setShowItemSelect(false);
+    
+    setShowAddItem(false);
+    setSearchTerm('');
   };
 
-  const updateCartQuantity = (itemId, newQuantity) => {
-    if (newQuantity <= 0) {
-      removeFromCart(itemId);
-      return;
-    }
-
-    const item = stockData.find(i => i.id === itemId);
-    if (newQuantity > item.quantity) {
-      alert(`Only ${item.quantity} units available in stock`);
-      return;
-    }
-
-    setCart(cart.map(cartItem => 
-      cartItem.id === itemId 
-        ? {...cartItem, quantity: newQuantity}
-        : cartItem
-    ));
+  const updateQuantity = (index, newQuantity) => {
+    if (newQuantity < 1) return;
+    
+    const updatedCart = [...cart];
+    updatedCart[index].quantity = newQuantity;
+    updatedCart[index].total = updatedCart[index].price * newQuantity;
+    setCart(updatedCart);
   };
 
-  const removeFromCart = (itemId) => {
-    setCart(cart.filter(item => item.id !== itemId));
+  const updatePrice = (index, newPrice) => {
+    if (newPrice < 0) return;
+    
+    const updatedCart = [...cart];
+    updatedCart[index].price = newPrice;
+    updatedCart[index].total = newPrice * updatedCart[index].quantity;
+    setCart(updatedCart);
+  };
+
+  const removeFromCart = (index) => {
+    const updatedCart = cart.filter((_, i) => i !== index);
+    setCart(updatedCart);
   };
 
   const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    return cart.reduce((sum, item) => sum + item.total, 0);
   };
 
-  const processTransaction = () => {
+  const completeTransaction = () => {
     if (!selectedWorker) {
-      alert('Please select a worker');
+      alert('Please select a worker first');
       return;
     }
 
@@ -60,47 +75,35 @@ function ShopFunction({ stockData, workers, setTransactions }) {
       return;
     }
 
-    // Check stock availability
-    for (let cartItem of cart) {
-      const stockItem = stockData.find(s => s.id === cartItem.id);
-      if (cartItem.quantity > stockItem.quantity) {
-        alert(`Insufficient stock for ${cartItem.name}`);
-        return;
-      }
-    }
-
-    // Create transaction records
-    const date = new Date().toISOString().split('T')[0];
     const newTransactions = cart.map(item => ({
-      date,
+      id: Date.now() + Math.random(),
+      date: invoiceDate, // Use selected invoice date
       workerId: selectedWorker.id,
       workerName: selectedWorker.name,
       itemId: item.id,
       itemName: item.name,
       quantity: item.quantity,
       price: item.price,
-      total: item.price * item.quantity
+      total: item.total
     }));
 
-    setTransactions(prev => [...prev, ...newTransactions]);
-
-    // Clear cart
+    setTransactions(prevTransactions => [...prevTransactions, ...newTransactions]);
+    
+    alert(`Transaction completed!\nWorker: ${selectedWorker.name}\nDate: ${invoiceDate}\nTotal: R ${calculateTotal().toFixed(2)}`);
+    
     setCart([]);
-    alert('Transaction completed successfully!');
-  };
-
-  const getAvailableItems = () => {
-    return stockData.filter(item => item.quantity > 0);
+    setInvoiceDate(new Date().toISOString().split('T')[0]); // Reset to today
   };
 
   return (
     <div>
       <div className="page-header">
-        <h2>Shop</h2>
-        <p>Process worker purchases</p>
+        <h2>Shop Function</h2>
+        <p>Process sales and transactions</p>
       </div>
 
-      <div className="card">
+      {/* Worker Selection */}
+      <div className="card" style={{ marginBottom: '24px' }}>
         <div className="card-header">
           <h3>Select Worker</h3>
         </div>
@@ -109,13 +112,13 @@ function ShopFunction({ stockData, workers, setTransactions }) {
             value={selectedWorker?.id || ''}
             onChange={(e) => {
               const worker = workers.find(w => w.id === parseInt(e.target.value));
-              setSelectedWorker(worker);
+              selectWorker(worker);
             }}
           >
-            <option value="">Select a worker</option>
+            <option value="">Choose a worker</option>
             {workers.map(worker => (
               <option key={worker.id} value={worker.id}>
-                {worker.name}
+                {worker.name} ({worker.farmId}){worker.houseNumber ? ` - House ${worker.houseNumber}` : ''}
               </option>
             ))}
           </select>
@@ -124,133 +127,255 @@ function ShopFunction({ stockData, workers, setTransactions }) {
         {selectedWorker && (
           <div className="alert alert-info">
             <User size={20} />
-            <span>Shopping for: {selectedWorker.name}</span>
+            <div>
+              <strong>{selectedWorker.name}</strong>
+              <div style={{ fontSize: '14px' }}>Farm ID: {selectedWorker.farmId}</div>
+              {selectedWorker.houseNumber && (
+                <div style={{ fontSize: '14px' }}>House Number: {selectedWorker.houseNumber}</div>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h3>Shopping Cart</h3>
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowItemSelect(true)}
-            disabled={!selectedWorker}
-          >
-            <Plus size={20} />
-            Add Item
-          </button>
+      {/* Invoice Date Selection */}
+      {selectedWorker && (
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <div className="card-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={20} />
+              <h3>Invoice Date</h3>
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Transaction Date (for backdating)</label>
+            <input
+              type="date"
+              value={invoiceDate}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+              max={new Date().toISOString().split('T')[0]} // Can't select future dates
+            />
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Selected date: {new Date(invoiceDate).toLocaleDateString('en-ZA', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </small>
+          </div>
         </div>
+      )}
 
-        {cart.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-            <ShoppingCart size={48} />
-            <p style={{ marginTop: '16px' }}>Cart is empty</p>
+      {/* Shopping Cart */}
+      {selectedWorker && (
+        <div className="card">
+          <div className="card-header">
+            <h3>Shopping Cart</h3>
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowAddItem(true)}
+            >
+              <Plus size={20} />
+              Add Item
+            </button>
           </div>
-        ) : (
-          <>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Price</th>
-                    <th>Quantity</th>
-                    <th>Subtotal</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cart.map(item => (
-                    <tr key={item.id}>
-                      <td>{item.name}</td>
-                      <td>R {item.price.toFixed(2)}</td>
-                      <td>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateCartQuantity(item.id, parseInt(e.target.value))}
-                          style={{ width: '80px', padding: '4px 8px' }}
-                        />
-                      </td>
-                      <td>R {(item.price * item.quantity).toFixed(2)}</td>
-                      <td>
-                        <button 
-                          className="btn btn-danger"
-                          onClick={() => removeFromCart(item.id)}
-                          style={{ padding: '6px 12px' }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
+
+          {cart.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+              <ShoppingCart size={48} />
+              <p style={{ marginTop: '16px' }}>Cart is empty. Add items to get started.</p>
+            </div>
+          ) : (
+            <>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Price</th>
+                      <th>Quantity</th>
+                      <th>Total</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div style={{ marginTop: '24px', textAlign: 'right' }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>
-                Total: R {calculateTotal().toFixed(2)}
+                  </thead>
+                  <tbody>
+                    {cart.map((item, index) => (
+                      <tr key={index}>
+                        <td>{item.name}</td>
+                        <td>
+                          <input
+                            type="number"
+                            value={item.price}
+                            onChange={(e) => updatePrice(index, parseFloat(e.target.value) || 0)}
+                            style={{ width: '100px', padding: '4px 8px' }}
+                            step="0.01"
+                            min="0"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
+                            min="1"
+                            style={{ width: '60px', padding: '4px 8px' }}
+                          />
+                        </td>
+                        <td>R {item.total.toFixed(2)}</td>
+                        <td>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => removeFromCart(index)}
+                            style={{ padding: '6px 12px' }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan="3" style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                        Total:
+                      </td>
+                      <td style={{ fontWeight: 'bold', fontSize: '18px' }}>
+                        R {calculateTotal().toFixed(2)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
-              <button 
-                className="btn btn-primary"
-                onClick={processTransaction}
-                style={{ fontSize: '16px', padding: '12px 32px' }}
-              >
-                Complete Transaction
-              </button>
-            </div>
-          </>
-        )}
-      </div>
 
-      {/* Item Selection Modal */}
-      {showItemSelect && (
+              <div style={{ marginTop: '24px', textAlign: 'right', display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                    Invoice Date: {new Date(invoiceDate).toLocaleDateString()}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#666' }}>
+                    {cart.length} item{cart.length !== 1 ? 's' : ''} • R {calculateTotal().toFixed(2)}
+                  </div>
+                </div>
+                <button 
+                  className="btn btn-primary"
+                  onClick={completeTransaction}
+                  style={{ fontSize: '16px', padding: '12px 32px' }}
+                >
+                  Complete Transaction
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Add Item Modal with Search */}
+      {showAddItem && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="modal" style={{ maxWidth: '800px' }}>
             <div className="modal-header">
-              <h3>Select Item</h3>
+              <h3>Add Item to Cart</h3>
               <button 
                 className="btn btn-secondary"
-                onClick={() => setShowItemSelect(false)}
+                onClick={() => {
+                  setShowAddItem(false);
+                  setSearchTerm('');
+                }}
               >
-                ×
+                <X size={20} />
               </button>
             </div>
 
-            <div className="table-container">
+            {/* Search Box */}
+            <div className="form-group">
+              <label>Search Item (Name or Code)</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by name or stock code..."
+                  autoFocus
+                  style={{ paddingLeft: '36px' }}
+                />
+                <Search 
+                  size={18} 
+                  style={{ 
+                    position: 'absolute', 
+                    left: '12px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)',
+                    color: '#999'
+                  }} 
+                />
+              </div>
+            </div>
+
+            <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
               <table>
                 <thead>
                   <tr>
+                    <th>Code</th>
                     <th>Item</th>
                     <th>Category</th>
                     <th>Price</th>
-                    <th>Available</th>
-                    <th></th>
+                    <th>Stock</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {getAvailableItems().map(item => {
-                    const price = item.sellPrice || item.price;
-                    return (
+                  {stockData
+                    .filter(item => {
+                      if (!searchTerm) return true;
+                      const search = searchTerm.toLowerCase();
+                      return (
+                        item.name.toLowerCase().includes(search) ||
+                        (item.stockCode && item.stockCode.toLowerCase().includes(search))
+                      );
+                    })
+                    .map(item => (
                       <tr key={item.id}>
+                        <td>{item.stockCode || '-'}</td>
                         <td>{item.name}</td>
                         <td>{item.category}</td>
-                        <td>R {price.toFixed(2)}</td>
-                        <td>{item.quantity}</td>
+                        <td>R {item.sellPrice.toFixed(2)}</td>
                         <td>
-                          <button 
+                          <span style={{ 
+                            color: item.quantity === 0 ? '#c62828' : item.quantity <= 10 ? '#e65100' : '#2e7d32',
+                            fontWeight: 'bold'
+                          }}>
+                            {item.quantity}
+                          </span>
+                        </td>
+                        <td>
+                          <button
                             className="btn btn-primary"
                             onClick={() => addToCart(item)}
+                            disabled={item.quantity === 0}
+                            style={{ padding: '6px 12px' }}
                           >
+                            <Plus size={16} />
                             Add
                           </button>
                         </td>
                       </tr>
+                    ))}
+                  {stockData.filter(item => {
+                    if (!searchTerm) return true;
+                    const search = searchTerm.toLowerCase();
+                    return (
+                      item.name.toLowerCase().includes(search) ||
+                      (item.stockCode && item.stockCode.toLowerCase().includes(search))
                     );
-                  })}
+                  }).length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                        No items found matching "{searchTerm}"
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

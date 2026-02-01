@@ -1,14 +1,57 @@
 import React, { useState } from 'react';
-import { Plus, Edit, X, Upload } from 'lucide-react';
+import { Plus, Edit, X, Upload, Download } from 'lucide-react';
+
+// Helper function to export to Excel (CSV format)
+const exportToExcel = (data, filename) => {
+  if (!data || data.length === 0) {
+    alert('No data to export');
+    return;
+  }
+
+  const headers = Object.keys(data[0]);
+  const csv = [
+    headers.join(','),
+    ...data.map(row => 
+      headers.map(header => {
+        const value = row[header];
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(',')
+    )
+  ].join('\n');
+
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
 function Workers({ workers, setWorkers }) {
+  const handleExportWorkers = () => {
+    const exportData = workers.map(w => ({
+      'Name': w.name,
+      'ID Number': w.idNumber || '',
+      'Farm ID': w.farmId,
+      'House Number': w.houseNumber || ''
+    }));
+    
+    exportToExcel(exportData, 'Workers_List');
+  };
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [editingWorker, setEditingWorker] = useState(null);
-  
   const [workerData, setWorkerData] = useState({
     name: '',
     idNumber: '',
-    farmId: ''
+    farmId: '',
+    houseNumber: ''
   });
 
   const handleAddWorker = () => {
@@ -21,11 +64,12 @@ function Workers({ workers, setWorkers }) {
       id: Date.now(),
       name: workerData.name,
       idNumber: workerData.idNumber,
-      farmId: workerData.farmId
+      farmId: workerData.farmId,
+      houseNumber: workerData.houseNumber
     };
 
     setWorkers([...workers, worker]);
-    setWorkerData({ name: '', idNumber: '', farmId: '' });
+    setWorkerData({ name: '', idNumber: '', farmId: '', houseNumber: '' });
     setShowAddWorker(false);
   };
 
@@ -37,12 +81,18 @@ function Workers({ workers, setWorkers }) {
 
     const updatedWorkers = workers.map(w => 
       w.id === editingWorker.id 
-        ? { ...w, name: workerData.name, idNumber: workerData.idNumber, farmId: workerData.farmId }
+        ? { 
+            ...w, 
+            name: workerData.name, 
+            idNumber: workerData.idNumber, 
+            farmId: workerData.farmId,
+            houseNumber: workerData.houseNumber 
+          }
         : w
     );
 
     setWorkers(updatedWorkers);
-    setWorkerData({ name: '', idNumber: '', farmId: '' });
+    setWorkerData({ name: '', idNumber: '', farmId: '', houseNumber: '' });
     setEditingWorker(null);
   };
 
@@ -51,7 +101,8 @@ function Workers({ workers, setWorkers }) {
     setWorkerData({
       name: worker.name,
       idNumber: worker.idNumber,
-      farmId: worker.farmId || ''
+      farmId: worker.farmId || '',
+      houseNumber: worker.houseNumber || ''
     });
   };
 
@@ -79,6 +130,7 @@ function Workers({ workers, setWorkers }) {
           const name = values[0];
           const idNumber = values[1] || '';
           const farmId = values[2];
+          const houseNumber = values[3] || '';
           
           // Validate required fields (Name and Farm ID)
           if (!name || !farmId) {
@@ -90,7 +142,8 @@ function Workers({ workers, setWorkers }) {
             id: Date.now() + i,
             name: name,
             idNumber: idNumber,
-            farmId: farmId
+            farmId: farmId,
+            houseNumber: houseNumber
           });
         }
         
@@ -102,10 +155,10 @@ function Workers({ workers, setWorkers }) {
           setWorkers([...workers, ...importedWorkers]);
           alert(`Successfully imported ${importedWorkers.length} workers!`);
         } else {
-          alert('No valid workers found in the file. Make sure all rows have Name and Farm ID (SA ID is optional).');
+          alert('No valid workers found in the file. Make sure all rows have Name and Farm ID.');
         }
       } catch (error) {
-        alert('Error reading file. Please make sure it\'s a valid CSV file with format: name,id_number,farm_id');
+        alert('Error reading file. Please make sure it\'s a valid CSV file with format: name,id_number,farm_id,house_number');
       }
     };
     reader.readAsText(file);
@@ -118,7 +171,7 @@ function Workers({ workers, setWorkers }) {
         <p>Manage farm workers</p>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <button 
           className="btn btn-primary"
           onClick={() => setShowAddWorker(true)}
@@ -126,9 +179,10 @@ function Workers({ workers, setWorkers }) {
           <Plus size={20} />
           Add Worker
         </button>
+
         <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
           <Upload size={20} />
-          Import CSV
+          Import Workers (CSV)
           <input
             type="file"
             accept=".csv"
@@ -136,6 +190,15 @@ function Workers({ workers, setWorkers }) {
             style={{ display: 'none' }}
           />
         </label>
+
+        <button 
+          className="btn btn-secondary"
+          onClick={handleExportWorkers}
+          disabled={workers.length === 0}
+        >
+          <Download size={20} />
+          Export Workers to Excel
+        </button>
       </div>
 
       <div className="card">
@@ -149,17 +212,19 @@ function Workers({ workers, setWorkers }) {
                 <th>Name</th>
                 <th>ID Number</th>
                 <th>Farm ID</th>
+                <th>House Number</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {workers.map(worker => (
                 <tr key={worker.id}>
-                  <td>{worker.name}</td>
-                  <td>{worker.idNumber}</td>
-                  <td>{worker.farmId || '-'}</td>
+                  <td><strong>{worker.name}</strong></td>
+                  <td>{worker.idNumber || '-'}</td>
+                  <td>{worker.farmId}</td>
+                  <td>{worker.houseNumber || '-'}</td>
                   <td>
-                    <button 
+                    <button
                       className="btn btn-secondary"
                       onClick={() => openEditModal(worker)}
                       style={{ padding: '6px 12px' }}
@@ -199,7 +264,7 @@ function Workers({ workers, setWorkers }) {
             </div>
 
             <div className="form-group">
-              <label>ID Number (SA ID)</label>
+              <label>ID Number (SA ID) - Optional</label>
               <input
                 type="text"
                 value={workerData.idNumber}
@@ -216,6 +281,16 @@ function Workers({ workers, setWorkers }) {
                 value={workerData.farmId}
                 onChange={(e) => setWorkerData({...workerData, farmId: e.target.value})}
                 placeholder="e.g., W001 or FARM-123"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>House Number - Optional</label>
+              <input
+                type="text"
+                value={workerData.houseNumber}
+                onChange={(e) => setWorkerData({...workerData, houseNumber: e.target.value})}
+                placeholder="e.g., H15 or House 15"
               />
             </div>
 
@@ -265,13 +340,12 @@ function Workers({ workers, setWorkers }) {
             </div>
 
             <div className="form-group">
-              <label>ID Number (SA ID)</label>
+              <label>ID Number (SA ID) - Optional</label>
               <input
                 type="text"
                 value={workerData.idNumber}
                 onChange={(e) => setWorkerData({...workerData, idNumber: e.target.value})}
                 maxLength="13"
-                placeholder="Optional"
               />
             </div>
 
@@ -281,6 +355,16 @@ function Workers({ workers, setWorkers }) {
                 type="text"
                 value={workerData.farmId}
                 onChange={(e) => setWorkerData({...workerData, farmId: e.target.value})}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>House Number - Optional</label>
+              <input
+                type="text"
+                value={workerData.houseNumber}
+                onChange={(e) => setWorkerData({...workerData, houseNumber: e.target.value})}
+                placeholder="e.g., H15 or House 15"
               />
             </div>
 
