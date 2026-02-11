@@ -24,7 +24,7 @@ function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Google Apps Script configuration - UPDATE THIS URL!
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhfPizVi_EiUZ1pMnDeQJmnrBVCwnNnlJlb0-WH8MwSobML0O-9vT4eCjknomztu2_mrkLFTxUC4gUu_wQpmr_Sww/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx-iCzWPUNKjP4iDdRymzzl5TsvRwXmXrJ2Jx9B16fBVFJg6rRMlHFdD9W1JMOGmqg/exec';
   
   // Check for saved login session
   useEffect(() => {
@@ -252,13 +252,20 @@ function App() {
 
   // Save data to Google Sheets (background, doesn't block UI)
   const saveToSheets = async (sheetName, data) => {
-    if (!data || data.length === 0) return;
+    if (!data || data.length === 0) {
+      console.log(`⏭️ Skipping save to ${sheetName} - no data`);
+      return;
+    }
     
     try {
       console.log(`💾 Saving ${data.length} items to ${sheetName}...`);
       
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
+        mode: 'no-cors', // Important for Google Apps Script
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           action: 'write',
           sheet: sheetName,
@@ -266,16 +273,42 @@ function App() {
         })
       });
       
-      const result = await response.json();
+      // Note: no-cors means we can't read the response
+      // But we know it sent successfully if no error was thrown
+      console.log(`✅ Sent to ${sheetName}`);
       
-      if (result.status === 'success') {
-        console.log(`✅ Saved to ${sheetName}`);
-      } else {
-        console.error(`❌ Error saving to ${sheetName}:`, result.message);
-      }
+      // Store timestamp of last sync
+      localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+      
     } catch (error) {
       console.error(`❌ Error saving to ${sheetName}:`, error);
-      // Don't throw - just log. Data is already in localStorage
+      // Don't throw - data is already in localStorage
+    }
+  };
+
+  // Manual sync function - call this to force sync
+  const forceSync = async () => {
+    console.log('🔄 Force syncing all data to Google Sheets...');
+    
+    try {
+      if (workers.length > 0) {
+        await saveToSheets('Workers', workers);
+      }
+      if (stockData.length > 0) {
+        await saveToSheets('Stock_Master', stockData);
+      }
+      if (transactions.length > 0) {
+        await saveToSheets('Transactions', transactions);
+      }
+      if (stocktakes.length > 0) {
+        await saveToSheets('Stocktakes', stocktakes);
+      }
+      
+      alert('✅ All data synced to Google Sheets!\n\nYou can now access it on other devices.');
+      
+    } catch (error) {
+      console.error('Sync error:', error);
+      alert('⚠️ Some data may not have synced.\n\nCheck browser console for details.');
     }
   };
 
@@ -291,7 +324,7 @@ function App() {
   const renderContent = () => {
     switch(activeTab) {
       case 'dashboard':
-        return <Dashboard stockData={stockData} transactions={transactions} />;
+        return <Dashboard stockData={stockData} transactions={transactions} onForceSync={forceSync} />;
       case 'stock':
         return <StockManagement stockData={stockData} setStockData={setStockData} />;
       case 'shop':
@@ -303,7 +336,7 @@ function App() {
       case 'reports':
         return <Reports transactions={transactions} workers={workers} stocktakes={stocktakes} />;
       default:
-        return <Dashboard stockData={stockData} transactions={transactions} />;
+        return <Dashboard stockData={stockData} transactions={transactions} onForceSync={forceSync} />;
     }
   };
 

@@ -1,11 +1,36 @@
 import React, { useState } from 'react';
-import { AlertCircle, Package, TrendingDown, Users, DollarSign, ShoppingBag, TrendingUp } from 'lucide-react';
+import { AlertCircle, Package, TrendingDown, Users, DollarSign, ShoppingBag, TrendingUp, RefreshCw, Cloud } from 'lucide-react';
 
-function Dashboard({ stockData, transactions }) {
+function Dashboard({ stockData, transactions, onForceSync }) {
   const [dateFilter, setDateFilter] = useState({
     startDate: '',
     endDate: ''
   });
+  const [syncing, setSyncing] = useState(false);
+
+  // Get last sync times from localStorage
+  const getLastSyncTime = (sheetName) => {
+    const lastSync = localStorage.getItem(`farmShop_${sheetName}_lastSync`);
+    if (!lastSync) return 'Never';
+    
+    const syncDate = new Date(lastSync);
+    const now = new Date();
+    const diffMs = now - syncDate;
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`;
+    return syncDate.toLocaleDateString();
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    if (onForceSync) {
+      await onForceSync();
+    }
+    setSyncing(false);
+  };
 
   // Filter transactions by date
   const getFilteredTransactions = () => {
@@ -55,26 +80,95 @@ function Dashboard({ stockData, transactions }) {
     return sum;
   }, 0);
 
-  // Recent transactions (last 5)
-  const recentTransactions = filteredTransactions.slice(-5).reverse();
-
-  const clearFilters = () => {
-    setDateFilter({ startDate: '', endDate: '' });
-  };
-
   return (
     <div>
       <div className="page-header">
-        <h2>Dashboard</h2>
-        <p>Overview of your farm shop</p>
+        <div>
+          <h2>Dashboard</h2>
+          <p>Overview of your farm shop</p>
+        </div>
+        
+        {/* Sync Status Card */}
+        <div style={{ 
+          backgroundColor: 'white', 
+          padding: '16px 20px', 
+          borderRadius: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px'
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Cloud size={18} color="#2c5530" />
+              <strong style={{ fontSize: '14px' }}>Cloud Sync</strong>
+            </div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              Last sync: {getLastSyncTime('Workers')}
+            </div>
+          </div>
+          <button 
+            className="btn btn-primary"
+            onClick={handleSync}
+            disabled={syncing}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            <RefreshCw size={16} className={syncing ? 'spinning' : ''} />
+            {syncing ? 'Syncing...' : 'Sync Now'}
+          </button>
+        </div>
       </div>
 
+      {/* Stats Grid */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon" style={{ backgroundColor: '#e3f2fd' }}>
+            <Package size={24} color="#1976d2" />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">Total Stock Items</div>
+            <div className="stat-value">{totalItems}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ backgroundColor: '#ffebee' }}>
+            <AlertCircle size={24} color="#c62828" />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">Out of Stock</div>
+            <div className="stat-value">{outOfStockItems.length}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ backgroundColor: '#fff3e0' }}>
+            <TrendingDown size={24} color="#e65100" />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">Low Stock</div>
+            <div className="stat-value">{lowStockItems.length}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ backgroundColor: '#e8f5e9' }}>
+            <DollarSign size={24} color="#2e7d32" />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">Stock Value</div>
+            <div className="stat-value">R {totalStockValue.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Date Filter */}
       <div className="card" style={{ marginBottom: '24px' }}>
         <div className="card-header">
-          <h3>Filter Sales Period</h3>
+          <h3>Sales Period</h3>
         </div>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
-          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+        <div className="form-row">
+          <div className="form-group">
             <label>Start Date</label>
             <input
               type="date"
@@ -82,7 +176,7 @@ function Dashboard({ stockData, transactions }) {
               onChange={(e) => setDateFilter({...dateFilter, startDate: e.target.value})}
             />
           </div>
-          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+          <div className="form-group">
             <label>End Date</label>
             <input
               type="date"
@@ -90,216 +184,108 @@ function Dashboard({ stockData, transactions }) {
               onChange={(e) => setDateFilter({...dateFilter, endDate: e.target.value})}
             />
           </div>
-          {(dateFilter.startDate || dateFilter.endDate) && (
-            <button className="btn btn-secondary" onClick={clearFilters}>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button 
+              className="btn btn-secondary"
+              onClick={() => setDateFilter({ startDate: '', endDate: '' })}
+            >
               Clear Filter
             </button>
-          )}
-        </div>
-        {(dateFilter.startDate || dateFilter.endDate) && (
-          <div className="alert alert-info" style={{ marginTop: '16px', marginBottom: 0 }}>
-            <span>
-              Showing data from {dateFilter.startDate || 'beginning'} to {dateFilter.endDate || 'today'}
-            </span>
           </div>
-        )}
+        </div>
       </div>
 
+      {/* Period Stats */}
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon" style={{ backgroundColor: '#e3f2fd', color: '#1565c0' }}>
-              <DollarSign size={24} />
-            </div>
+          <div className="stat-icon" style={{ backgroundColor: '#f3e5f5' }}>
+            <ShoppingBag size={24} color="#7b1fa2" />
           </div>
-          <div className="stat-card-value">R {periodTotalSales.toFixed(2)}</div>
-          <div className="stat-card-label">
-            {dateFilter.startDate || dateFilter.endDate ? 'Period Sales' : 'Total Sales'}
+          <div className="stat-content">
+            <div className="stat-label">
+              {dateFilter.startDate || dateFilter.endDate ? 'Period Sales' : 'Total Sales'}
+            </div>
+            <div className="stat-value">R {periodTotalSales.toFixed(2)}</div>
+            <div className="stat-subtext">{periodTransactionCount} transactions</div>
           </div>
         </div>
 
         <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon" style={{ backgroundColor: '#fff3e0', color: '#e65100' }}>
-              <ShoppingBag size={24} />
-            </div>
+          <div className="stat-icon" style={{ backgroundColor: '#e8f5e9' }}>
+            <TrendingUp size={24} color="#2e7d32" />
           </div>
-          <div className="stat-card-value">{periodTransactionCount}</div>
-          <div className="stat-card-label">
-            {dateFilter.startDate || dateFilter.endDate ? 'Period Transactions' : 'Total Transactions'}
-          </div>
-        </div>
-
-        {periodProfit > 0 && (
-          <div className="stat-card">
-            <div className="stat-card-header">
-              <div className="stat-card-icon" style={{ backgroundColor: '#e8f5e9', color: '#2e7d32' }}>
-                <TrendingUp size={24} />
-              </div>
-            </div>
-            <div className="stat-card-value">R {periodProfit.toFixed(2)}</div>
-            <div className="stat-card-label">
+          <div className="stat-content">
+            <div className="stat-label">
               {dateFilter.startDate || dateFilter.endDate ? 'Period Profit' : 'Total Profit'}
             </div>
-          </div>
-        )}
-
-        {uniqueWorkers > 0 && (
-          <div className="stat-card">
-            <div className="stat-card-header">
-              <div className="stat-card-icon" style={{ backgroundColor: '#f3e5f5', color: '#7b1fa2' }}>
-                <Users size={24} />
-              </div>
-            </div>
-            <div className="stat-card-value">{uniqueWorkers}</div>
-            <div className="stat-card-label">Active Workers</div>
-          </div>
-        )}
-
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon">
-              <Package size={24} />
+            <div className="stat-value">R {periodProfit.toFixed(2)}</div>
+            <div className="stat-subtext">
+              {periodProfit > 0 ? `${((periodProfit / periodTotalSales) * 100).toFixed(1)}% margin` : 'No data'}
             </div>
           </div>
-          <div className="stat-card-value">{totalItems}</div>
-          <div className="stat-card-label">Total Stock Items</div>
         </div>
 
         <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon" style={{ backgroundColor: '#ffebee', color: '#c62828' }}>
-              <TrendingDown size={24} />
+          <div className="stat-icon" style={{ backgroundColor: '#e0f2f1' }}>
+            <Users size={24} color="#00695c" />
+          </div>
+          <div className="stat-content">
+            <div className="stat-label">Active Workers</div>
+            <div className="stat-value">{uniqueWorkers}</div>
+            <div className="stat-subtext">
+              {periodTransactionCount > 0 
+                ? `Avg R ${(periodTotalSales / uniqueWorkers).toFixed(2)} per worker`
+                : 'No transactions'}
             </div>
           </div>
-          <div className="stat-card-value">{lowStockItems.length}</div>
-          <div className="stat-card-label">Low Stock (5-10)</div>
         </div>
 
-        {outOfStockItems.length > 0 && (
-          <div className="stat-card">
-            <div className="stat-card-header">
-              <div className="stat-card-icon" style={{ backgroundColor: '#d32f2f', color: 'white' }}>
-                <AlertCircle size={24} />
-              </div>
-            </div>
-            <div className="stat-card-value">{outOfStockItems.length}</div>
-            <div className="stat-card-label">Out of Stock (&lt;5)</div>
-          </div>
-        )}
-
         <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon" style={{ backgroundColor: '#e3f2fd', color: '#1565c0' }}>
-              <Package size={24} />
-            </div>
+          <div className="stat-icon" style={{ backgroundColor: '#fff3e0' }}>
+            <ShoppingBag size={24} color="#e65100" />
           </div>
-          <div className="stat-card-value">R {totalStockValue.toFixed(2)}</div>
-          <div className="stat-card-label">Total Stock Value</div>
+          <div className="stat-content">
+            <div className="stat-label">Avg Transaction</div>
+            <div className="stat-value">
+              R {periodTransactionCount > 0 ? (periodTotalSales / periodTransactionCount).toFixed(2) : '0.00'}
+            </div>
+            <div className="stat-subtext">Per sale</div>
+          </div>
         </div>
       </div>
 
-      {outOfStockItems.length > 0 && (
+      {/* Stock Alerts */}
+      {(outOfStockItems.length > 0 || lowStockItems.length > 0) && (
         <div className="card">
           <div className="card-header">
-            <h3>Out of Stock - Urgent!</h3>
+            <h3>Stock Alerts</h3>
           </div>
-          <div className="alert alert-danger">
-            <AlertCircle size={20} />
-            <span>{outOfStockItems.length} items are OUT OF STOCK (&lt;5 units) and need immediate restocking</span>
-          </div>
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Category</th>
-                  <th>Current Qty</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {outOfStockItems.map(item => (
-                  <tr key={item.id}>
-                    <td>{item.name}</td>
-                    <td>{item.category}</td>
-                    <td style={{ fontWeight: 'bold', color: '#c62828' }}>{item.quantity}</td>
-                    <td>
-                      <span className="badge badge-danger">Out of Stock</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
-      {lowStockItems.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3>Low Stock Alerts</h3>
-          </div>
-          <div className="alert alert-warning">
-            <AlertCircle size={20} />
-            <span>{lowStockItems.length} items are running low (5-10 units) and need restocking soon</span>
-          </div>
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Category</th>
-                  <th>Current Qty</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lowStockItems.map(item => (
-                  <tr key={item.id}>
-                    <td>{item.name}</td>
-                    <td>{item.category}</td>
-                    <td style={{ fontWeight: 'bold', color: '#e65100' }}>{item.quantity}</td>
-                    <td>
-                      <span className="badge badge-low">Low Stock</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+          {outOfStockItems.length > 0 && (
+            <div className="alert alert-error" style={{ marginBottom: '16px' }}>
+              <AlertCircle size={20} />
+              <div>
+                <strong>{outOfStockItems.length} items out of stock</strong>
+                <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                  {outOfStockItems.slice(0, 3).map(item => item.name).join(', ')}
+                  {outOfStockItems.length > 3 && ` and ${outOfStockItems.length - 3} more...`}
+                </div>
+              </div>
+            </div>
+          )}
 
-      {recentTransactions.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3>{dateFilter.startDate || dateFilter.endDate ? 'Filtered Transactions' : 'Recent Transactions'}</h3>
-          </div>
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Worker</th>
-                  <th>Item</th>
-                  <th>Quantity</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTransactions.map((transaction, index) => (
-                  <tr key={index}>
-                    <td>{transaction.date}</td>
-                    <td>{transaction.workerName}</td>
-                    <td>{transaction.itemName}</td>
-                    <td>{transaction.quantity}</td>
-                    <td>R {transaction.total.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {lowStockItems.length > 0 && (
+            <div className="alert alert-warning">
+              <TrendingDown size={20} />
+              <div>
+                <strong>{lowStockItems.length} items running low</strong>
+                <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                  {lowStockItems.slice(0, 3).map(item => `${item.name} (${item.quantity})`).join(', ')}
+                  {lowStockItems.length > 3 && ` and ${lowStockItems.length - 3} more...`}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
