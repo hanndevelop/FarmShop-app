@@ -247,18 +247,28 @@ function App() {
     console.log('✅ Data load complete!');
   };
 
-  // Merge function - combines local and sheets data, keeping unique items
+  // Merge function - combines local and sheets data, preferring sheets when both exist
   const mergeData = (localData, sheetsData, uniqueKey) => {
-    const merged = [...localData];
-    const existingKeys = new Set(localData.map(item => String(item[uniqueKey])));
+    console.log(`🔀 Merging data - Local: ${localData.length}, Sheets: ${sheetsData.length}`);
     
-    // Add items from sheets that don't exist locally
-    sheetsData.forEach(item => {
-      const key = String(item[uniqueKey]);
-      if (!existingKeys.has(key)) {
-        merged.push(item);
-      }
-    });
+    // If sheets has data and local is empty, use sheets
+    if (sheetsData.length > 0 && localData.length === 0) {
+      console.log(`  ↪️ Using Sheets data (local empty)`);
+      return sheetsData;
+    }
+    
+    // If local has data and sheets is empty, use local
+    if (localData.length > 0 && sheetsData.length === 0) {
+      console.log(`  ↪️ Using local data (sheets empty)`);
+      return localData;
+    }
+    
+    // Both have data - merge by unique key, preferring sheets data for duplicates
+    const sheetsKeys = new Set(sheetsData.map(item => String(item[uniqueKey])));
+    const localOnly = localData.filter(item => !sheetsKeys.has(String(item[uniqueKey])));
+    
+    const merged = [...sheetsData, ...localOnly];
+    console.log(`  ↪️ Merged result: ${merged.length} items (${sheetsData.length} from sheets + ${localOnly.length} local-only)`);
     
     return merged;
   };
@@ -339,11 +349,27 @@ function App() {
   const forceSync = async () => {
     console.log('🔄 Force syncing all data to Google Sheets...');
     
+    // Check if we have any data to sync
+    const hasData = workers.length > 0 || stockData.length > 0 || 
+                    transactions.length > 0 || stocktakes.length > 0;
+    
+    if (!hasData) {
+      alert('⚠️ No data to sync!\n\nAdd workers or stock first, then sync.');
+      return;
+    }
+    
+    // Don't allow sync during initial load
+    if (!dataLoaded) {
+      alert('⚠️ Please wait...\n\nData is still loading from Google Sheets.');
+      return;
+    }
+    
     try {
       const results = [];
       
       // Save and verify Workers
       if (workers.length > 0) {
+        console.log(`📤 Syncing ${workers.length} workers...`);
         await saveToSheets('Workers', workers);
         await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for Google to process
         try {
@@ -357,6 +383,7 @@ function App() {
       
       // Save and verify Stock
       if (stockData.length > 0) {
+        console.log(`📤 Syncing ${stockData.length} stock items...`);
         await saveToSheets('Stock_Master', stockData);
         await new Promise(resolve => setTimeout(resolve, 1500));
         try {
@@ -370,6 +397,7 @@ function App() {
       
       // Save and verify Transactions
       if (transactions.length > 0) {
+        console.log(`📤 Syncing ${transactions.length} transactions...`);
         await saveToSheets('Transactions', transactions);
         await new Promise(resolve => setTimeout(resolve, 1500));
         try {
@@ -383,6 +411,7 @@ function App() {
       
       // Save and verify Stocktakes
       if (stocktakes.length > 0) {
+        console.log(`📤 Syncing ${stocktakes.length} stocktakes...`);
         await saveToSheets('Stocktakes', stocktakes);
         await new Promise(resolve => setTimeout(resolve, 1500));
         try {
