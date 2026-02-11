@@ -21,9 +21,10 @@ function App() {
   const [transactions, setTransactions] = useState([]);
   const [stocktakes, setStocktakes] = useState([]);
   const [receipts, setReceipts] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Google Apps Script configuration - UPDATE THIS URL!
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz2-cKcB7WZEgxgbOH4HY7mE4Aw0bDrHFQ0zl-K3HyXoPJP3d95_eKWR5wDQDm7oNft/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhfPizVi_EiUZ1pMnDeQJmnrBVCwnNnlJlb0-WH8MwSobML0O-9vT4eCjknomztu2_mrkLFTxUC4gUu_wQpmr_Sww/exec';
   
   // Check for saved login session
   useEffect(() => {
@@ -34,40 +35,44 @@ function App() {
     }
   }, []);
 
-  // Load data from Google Sheets on login
+  // Load data when user logs in
   useEffect(() => {
-    if (isLoggedIn) {
+    if (isLoggedIn && !dataLoaded) {
       loadAllData();
     }
   }, [isLoggedIn]);
 
-  // Auto-save workers to Google Sheets when they change
+  // Auto-save workers (to BOTH localStorage AND Sheets)
   useEffect(() => {
-    if (isLoggedIn && workers.length > 0) {
+    if (dataLoaded && workers.length > 0) {
+      localStorage.setItem('farmShop_Workers', JSON.stringify(workers));
       saveToSheets('Workers', workers);
     }
-  }, [workers, isLoggedIn]);
+  }, [workers, dataLoaded]);
 
   // Auto-save stock data
   useEffect(() => {
-    if (isLoggedIn && stockData.length > 0) {
+    if (dataLoaded && stockData.length > 0) {
+      localStorage.setItem('farmShop_Stock', JSON.stringify(stockData));
       saveToSheets('Stock_Master', stockData);
     }
-  }, [stockData, isLoggedIn]);
+  }, [stockData, dataLoaded]);
 
   // Auto-save transactions
   useEffect(() => {
-    if (isLoggedIn && transactions.length > 0) {
+    if (dataLoaded && transactions.length > 0) {
+      localStorage.setItem('farmShop_Transactions', JSON.stringify(transactions));
       saveToSheets('Transactions', transactions);
     }
-  }, [transactions, isLoggedIn]);
+  }, [transactions, dataLoaded]);
 
   // Auto-save stocktakes
   useEffect(() => {
-    if (isLoggedIn && stocktakes.length > 0) {
+    if (dataLoaded && stocktakes.length > 0) {
+      localStorage.setItem('farmShop_Stocktakes', JSON.stringify(stocktakes));
       saveToSheets('Stocktakes', stocktakes);
     }
-  }, [stocktakes, isLoggedIn]);
+  }, [stocktakes, dataLoaded]);
 
   const handleLogin = (user) => {
     setCurrentUser(user);
@@ -82,24 +87,162 @@ function App() {
     setActiveTab('dashboard');
   };
 
-  // Load data from Google Sheets using JSONP (avoids CORS)
+  // Load data from localStorage FIRST, then try Google Sheets
+  const loadAllData = async () => {
+    console.log('🔄 Starting data load...');
+    
+    // STEP 1: Try localStorage first (most recent data)
+    const localWorkers = localStorage.getItem('farmShop_Workers');
+    const localStock = localStorage.getItem('farmShop_Stock');
+    const localTransactions = localStorage.getItem('farmShop_Transactions');
+    const localStocktakes = localStorage.getItem('farmShop_Stocktakes');
+
+    let workersLoaded = false;
+    let stockLoaded = false;
+
+    // Load Workers
+    if (localWorkers) {
+      try {
+        const parsed = JSON.parse(localWorkers);
+        if (parsed && parsed.length > 0) {
+          setWorkers(parsed);
+          console.log('✅ Loaded ' + parsed.length + ' workers from localStorage');
+          workersLoaded = true;
+          // Sync to sheets in background
+          saveToSheets('Workers', parsed);
+        }
+      } catch (e) {
+        console.error('Error parsing local workers:', e);
+      }
+    }
+
+    // Load Stock
+    if (localStock) {
+      try {
+        const parsed = JSON.parse(localStock);
+        if (parsed && parsed.length > 0) {
+          setStockData(parsed);
+          console.log('✅ Loaded ' + parsed.length + ' stock items from localStorage');
+          stockLoaded = true;
+          // Sync to sheets in background
+          saveToSheets('Stock_Master', parsed);
+        }
+      } catch (e) {
+        console.error('Error parsing local stock:', e);
+      }
+    }
+
+    // Load Transactions
+    if (localTransactions) {
+      try {
+        const parsed = JSON.parse(localTransactions);
+        if (parsed && parsed.length > 0) {
+          setTransactions(parsed);
+          console.log('✅ Loaded ' + parsed.length + ' transactions from localStorage');
+        }
+      } catch (e) {
+        console.error('Error parsing local transactions:', e);
+      }
+    }
+
+    // Load Stocktakes
+    if (localStocktakes) {
+      try {
+        const parsed = JSON.parse(localStocktakes);
+        if (parsed && parsed.length > 0) {
+          setStocktakes(parsed);
+          console.log('✅ Loaded ' + parsed.length + ' stocktakes from localStorage');
+        }
+      } catch (e) {
+        console.error('Error parsing local stocktakes:', e);
+      }
+    }
+
+    // STEP 2: If no local data, try Google Sheets
+    if (!workersLoaded) {
+      console.log('📡 No local workers, trying Google Sheets...');
+      try {
+        const workersResult = await loadFromSheets('Workers');
+        if (workersResult.status === 'success' && workersResult.data.length > 0) {
+          setWorkers(workersResult.data);
+          localStorage.setItem('farmShop_Workers', JSON.stringify(workersResult.data));
+          console.log('✅ Loaded ' + workersResult.data.length + ' workers from Sheets');
+          workersLoaded = true;
+        }
+      } catch (error) {
+        console.error('❌ Error loading workers from Sheets:', error);
+      }
+    }
+
+    if (!stockLoaded) {
+      console.log('📡 No local stock, trying Google Sheets...');
+      try {
+        const stockResult = await loadFromSheets('Stock_Master');
+        if (stockResult.status === 'success' && stockResult.data.length > 0) {
+          setStockData(stockResult.data);
+          localStorage.setItem('farmShop_Stock', JSON.stringify(stockResult.data));
+          console.log('✅ Loaded ' + stockResult.data.length + ' stock items from Sheets');
+          stockLoaded = true;
+        }
+      } catch (error) {
+        console.error('❌ Error loading stock from Sheets:', error);
+      }
+    }
+
+    // STEP 3: If still no data, load samples
+    if (!workersLoaded) {
+      console.log('📝 Loading sample workers...');
+      const sampleWorkers = [
+        { id: 1, name: 'Johannes Mkhize', idNumber: '7801015800082', farmId: 'W001', houseNumber: '' },
+        { id: 2, name: 'Sarah Dlamini', idNumber: '8505129800083', farmId: 'W002', houseNumber: '' },
+      ];
+      setWorkers(sampleWorkers);
+      localStorage.setItem('farmShop_Workers', JSON.stringify(sampleWorkers));
+    }
+
+    if (!stockLoaded) {
+      console.log('📝 Loading sample stock...');
+      const sampleStock = [
+        { id: 1, name: 'Maize Meal 5kg', stockCode: 'MM5KG', category: 'Groceries', costPrice: 45, sellPrice: 56.70, quantity: 20, minQuantity: 5 },
+        { id: 2, name: 'Sugar 2.5kg', stockCode: 'SG25', category: 'Groceries', costPrice: 28, sellPrice: 35.28, quantity: 15, minQuantity: 5 },
+      ];
+      setStockData(sampleStock);
+      localStorage.setItem('farmShop_Stock', JSON.stringify(sampleStock));
+    }
+
+    setDataLoaded(true);
+    console.log('✅ Data load complete!');
+  };
+
+  // Load data from Google Sheets using JSONP
   const loadFromSheets = (sheetName) => {
     return new Promise((resolve, reject) => {
       const callbackName = 'jsonpCallback' + Date.now();
-      
-      // Create callback function
-      window[callbackName] = (data) => {
+      const timeout = setTimeout(() => {
         delete window[callbackName];
-        document.body.removeChild(script);
+        if (document.body.contains(script)) {
+          document.body.removeChild(script);
+        }
+        reject(new Error('Timeout loading from ' + sheetName));
+      }, 10000); // 10 second timeout
+      
+      window[callbackName] = (data) => {
+        clearTimeout(timeout);
+        delete window[callbackName];
+        if (document.body.contains(script)) {
+          document.body.removeChild(script);
+        }
         resolve(data);
       };
       
-      // Create script tag
       const script = document.createElement('script');
       script.src = `${APPS_SCRIPT_URL}?action=read&sheet=${sheetName}&callback=${callbackName}`;
       script.onerror = () => {
+        clearTimeout(timeout);
         delete window[callbackName];
-        document.body.removeChild(script);
+        if (document.body.contains(script)) {
+          document.body.removeChild(script);
+        }
         reject(new Error('Failed to load from ' + sheetName));
       };
       
@@ -107,71 +250,12 @@ function App() {
     });
   };
 
-  // Load all data from Google Sheets
-  const loadAllData = async () => {
-    try {
-      console.log('Loading data from Google Sheets using JSONP...');
-      
-      // Load workers
-      try {
-        const workersResult = await loadFromSheets('Workers');
-        if (workersResult.status === 'success' && workersResult.data.length > 0) {
-          setWorkers(workersResult.data);
-          console.log('✅ Loaded workers:', workersResult.data.length);
-        } else {
-          loadSampleWorkers();
-        }
-      } catch (error) {
-        console.error('Error loading workers:', error);
-        loadSampleWorkers();
-      }
-
-      // Load stock
-      try {
-        const stockResult = await loadFromSheets('Stock_Master');
-        if (stockResult.status === 'success' && stockResult.data.length > 0) {
-          setStockData(stockResult.data);
-          console.log('✅ Loaded stock items:', stockResult.data.length);
-        } else {
-          loadSampleStock();
-        }
-      } catch (error) {
-        console.error('Error loading stock:', error);
-        loadSampleStock();
-      }
-
-      // Load transactions
-      try {
-        const transactionsResult = await loadFromSheets('Transactions');
-        if (transactionsResult.status === 'success') {
-          setTransactions(transactionsResult.data);
-          console.log('✅ Loaded transactions:', transactionsResult.data.length);
-        }
-      } catch (error) {
-        console.error('Error loading transactions:', error);
-      }
-
-      // Load stocktakes
-      try {
-        const stocktakesResult = await loadFromSheets('Stocktakes');
-        if (stocktakesResult.status === 'success') {
-          setStocktakes(stocktakesResult.data);
-          console.log('✅ Loaded stocktakes:', stocktakesResult.data.length);
-        }
-      } catch (error) {
-        console.error('Error loading stocktakes:', error);
-      }
-
-    } catch (error) {
-      console.error('Error loading data from sheets:', error);
-      loadSampleData();
-    }
-  };
-
-  // Save data to Google Sheets using POST (works for writing)
+  // Save data to Google Sheets (background, doesn't block UI)
   const saveToSheets = async (sheetName, data) => {
+    if (!data || data.length === 0) return;
+    
     try {
-      console.log(`💾 Saving to ${sheetName}:`, data.length, 'items');
+      console.log(`💾 Saving ${data.length} items to ${sheetName}...`);
       
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
@@ -185,45 +269,14 @@ function App() {
       const result = await response.json();
       
       if (result.status === 'success') {
-        console.log(`✅ Successfully saved to ${sheetName}`);
+        console.log(`✅ Saved to ${sheetName}`);
       } else {
         console.error(`❌ Error saving to ${sheetName}:`, result.message);
       }
-      
-      return result;
     } catch (error) {
-      console.error(`Error saving to ${sheetName}:`, error);
-      // Save to localStorage as backup
-      localStorage.setItem(`farmShop_${sheetName}`, JSON.stringify(data));
-      console.log(`💾 Saved to localStorage as backup`);
+      console.error(`❌ Error saving to ${sheetName}:`, error);
+      // Don't throw - just log. Data is already in localStorage
     }
-  };
-
-  // Load sample workers
-  const loadSampleWorkers = () => {
-    console.log('Loading sample workers...');
-    setWorkers([
-      { id: 1, name: 'Johannes Mkhize', idNumber: '7801015800082', farmId: 'W001' },
-      { id: 2, name: 'Sarah Dlamini', idNumber: '8505129800083', farmId: 'W002' },
-    ]);
-  };
-
-  // Load sample stock
-  const loadSampleStock = () => {
-    console.log('Loading sample stock...');
-    setStockData([
-      { id: 1, name: 'Maize Meal 5kg', category: 'Groceries', costPrice: 45, sellPrice: 65, quantity: 20, minQuantity: 5 },
-      { id: 2, name: 'Sugar 2.5kg', category: 'Groceries', costPrice: 28, sellPrice: 40, quantity: 15, minQuantity: 5 },
-    ]);
-  };
-
-  // Load sample data (fallback)
-  const loadSampleData = () => {
-    console.log('Loading all sample data...');
-    loadSampleWorkers();
-    loadSampleStock();
-    setTransactions([]);
-    setStocktakes([]);
   };
 
   const navigation = [
@@ -254,7 +307,6 @@ function App() {
     }
   };
 
-  // Show login screen if not logged in
   if (!isLoggedIn) {
     return <Login onLogin={handleLogin} />;
   }
