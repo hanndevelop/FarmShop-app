@@ -87,111 +87,132 @@ function App() {
     setActiveTab('dashboard');
   };
 
-  // Load data from localStorage FIRST, then try Google Sheets
+  // Load data from localStorage FIRST, then MERGE with Google Sheets
   const loadAllData = async () => {
     console.log('🔄 Starting data load...');
     
-    // STEP 1: Try localStorage first (most recent data)
+    // STEP 1: Load from localStorage
     const localWorkers = localStorage.getItem('farmShop_Workers');
     const localStock = localStorage.getItem('farmShop_Stock');
     const localTransactions = localStorage.getItem('farmShop_Transactions');
     const localStocktakes = localStorage.getItem('farmShop_Stocktakes');
 
-    let workersLoaded = false;
-    let stockLoaded = false;
+    let localWorkersData = [];
+    let localStockData = [];
+    let localTransactionsData = [];
+    let localStocktakesData = [];
 
-    // Load Workers
+    // Parse localStorage data
     if (localWorkers) {
       try {
-        const parsed = JSON.parse(localWorkers);
-        if (parsed && parsed.length > 0) {
-          setWorkers(parsed);
-          console.log('✅ Loaded ' + parsed.length + ' workers from localStorage');
-          workersLoaded = true;
-          // Sync to sheets in background
-          saveToSheets('Workers', parsed);
-        }
+        localWorkersData = JSON.parse(localWorkers);
+        console.log('📱 Found ' + localWorkersData.length + ' workers in localStorage');
       } catch (e) {
         console.error('Error parsing local workers:', e);
       }
     }
 
-    // Load Stock
     if (localStock) {
       try {
-        const parsed = JSON.parse(localStock);
-        if (parsed && parsed.length > 0) {
-          setStockData(parsed);
-          console.log('✅ Loaded ' + parsed.length + ' stock items from localStorage');
-          stockLoaded = true;
-          // Sync to sheets in background
-          saveToSheets('Stock_Master', parsed);
-        }
+        localStockData = JSON.parse(localStock);
+        console.log('📱 Found ' + localStockData.length + ' stock items in localStorage');
       } catch (e) {
         console.error('Error parsing local stock:', e);
       }
     }
 
-    // Load Transactions
     if (localTransactions) {
       try {
-        const parsed = JSON.parse(localTransactions);
-        if (parsed && parsed.length > 0) {
-          setTransactions(parsed);
-          console.log('✅ Loaded ' + parsed.length + ' transactions from localStorage');
-        }
+        localTransactionsData = JSON.parse(localTransactions);
+        console.log('📱 Found ' + localTransactionsData.length + ' transactions in localStorage');
       } catch (e) {
         console.error('Error parsing local transactions:', e);
       }
     }
 
-    // Load Stocktakes
     if (localStocktakes) {
       try {
-        const parsed = JSON.parse(localStocktakes);
-        if (parsed && parsed.length > 0) {
-          setStocktakes(parsed);
-          console.log('✅ Loaded ' + parsed.length + ' stocktakes from localStorage');
-        }
+        localStocktakesData = JSON.parse(localStocktakes);
+        console.log('📱 Found ' + localStocktakesData.length + ' stocktakes in localStorage');
       } catch (e) {
         console.error('Error parsing local stocktakes:', e);
       }
     }
 
-    // STEP 2: If no local data, try Google Sheets
-    if (!workersLoaded) {
-      console.log('📡 No local workers, trying Google Sheets...');
+    // STEP 2: Load from Google Sheets
+    let sheetsWorkersData = [];
+    let sheetsStockData = [];
+    let sheetsTransactionsData = [];
+    let sheetsStocktakesData = [];
+
+    try {
+      console.log('☁️ Loading from Google Sheets...');
+      
+      // Load Workers from Sheets
       try {
         const workersResult = await loadFromSheets('Workers');
         if (workersResult.status === 'success' && workersResult.data.length > 0) {
-          setWorkers(workersResult.data);
-          localStorage.setItem('farmShop_Workers', JSON.stringify(workersResult.data));
-          console.log('✅ Loaded ' + workersResult.data.length + ' workers from Sheets');
-          workersLoaded = true;
+          sheetsWorkersData = workersResult.data;
+          console.log('☁️ Found ' + sheetsWorkersData.length + ' workers in Sheets');
         }
       } catch (error) {
-        console.error('❌ Error loading workers from Sheets:', error);
+        console.error('Error loading workers from Sheets:', error);
       }
-    }
 
-    if (!stockLoaded) {
-      console.log('📡 No local stock, trying Google Sheets...');
+      // Load Stock from Sheets
       try {
         const stockResult = await loadFromSheets('Stock_Master');
         if (stockResult.status === 'success' && stockResult.data.length > 0) {
-          setStockData(stockResult.data);
-          localStorage.setItem('farmShop_Stock', JSON.stringify(stockResult.data));
-          console.log('✅ Loaded ' + stockResult.data.length + ' stock items from Sheets');
-          stockLoaded = true;
+          sheetsStockData = stockResult.data;
+          console.log('☁️ Found ' + sheetsStockData.length + ' stock items in Sheets');
         }
       } catch (error) {
-        console.error('❌ Error loading stock from Sheets:', error);
+        console.error('Error loading stock from Sheets:', error);
       }
+
+      // Load Transactions from Sheets
+      try {
+        const transResult = await loadFromSheets('Transactions');
+        if (transResult.status === 'success' && transResult.data.length > 0) {
+          sheetsTransactionsData = transResult.data;
+          console.log('☁️ Found ' + sheetsTransactionsData.length + ' transactions in Sheets');
+        }
+      } catch (error) {
+        console.error('Error loading transactions from Sheets:', error);
+      }
+
+      // Load Stocktakes from Sheets
+      try {
+        const stocktakesResult = await loadFromSheets('Stocktakes');
+        if (stocktakesResult.status === 'success' && stocktakesResult.data.length > 0) {
+          sheetsStocktakesData = stocktakesResult.data;
+          console.log('☁️ Found ' + sheetsStocktakesData.length + ' stocktakes in Sheets');
+        }
+      } catch (error) {
+        console.error('Error loading stocktakes from Sheets:', error);
+      }
+
+    } catch (error) {
+      console.error('Error loading from Sheets:', error);
     }
 
-    // STEP 3: If still no data, load samples
-    if (!workersLoaded) {
-      console.log('📝 Loading sample workers...');
+    // STEP 3: MERGE data (keep most recent based on ID)
+    const mergedWorkers = mergeData(localWorkersData, sheetsWorkersData, 'farmId');
+    const mergedStock = mergeData(localStockData, sheetsStockData, 'id');
+    const mergedTransactions = mergeData(localTransactionsData, sheetsTransactionsData, 'id');
+    const mergedStocktakes = mergeData(localStocktakesData, sheetsStocktakesData, 'id');
+
+    console.log('🔀 Merged Workers: ' + mergedWorkers.length);
+    console.log('🔀 Merged Stock: ' + mergedStock.length);
+    console.log('🔀 Merged Transactions: ' + mergedTransactions.length);
+    console.log('🔀 Merged Stocktakes: ' + mergedStocktakes.length);
+
+    // STEP 4: Set merged data
+    if (mergedWorkers.length > 0) {
+      setWorkers(mergedWorkers);
+      localStorage.setItem('farmShop_Workers', JSON.stringify(mergedWorkers));
+    } else {
+      // Load sample data if nothing exists
       const sampleWorkers = [
         { id: 1, name: 'Johannes Mkhize', idNumber: '7801015800082', farmId: 'W001', houseNumber: '' },
         { id: 2, name: 'Sarah Dlamini', idNumber: '8505129800083', farmId: 'W002', houseNumber: '' },
@@ -200,8 +221,10 @@ function App() {
       localStorage.setItem('farmShop_Workers', JSON.stringify(sampleWorkers));
     }
 
-    if (!stockLoaded) {
-      console.log('📝 Loading sample stock...');
+    if (mergedStock.length > 0) {
+      setStockData(mergedStock);
+      localStorage.setItem('farmShop_Stock', JSON.stringify(mergedStock));
+    } else {
       const sampleStock = [
         { id: 1, name: 'Maize Meal 5kg', stockCode: 'MM5KG', category: 'Groceries', costPrice: 45, sellPrice: 56.70, quantity: 20, minQuantity: 5 },
         { id: 2, name: 'Sugar 2.5kg', stockCode: 'SG25', category: 'Groceries', costPrice: 28, sellPrice: 35.28, quantity: 15, minQuantity: 5 },
@@ -210,8 +233,34 @@ function App() {
       localStorage.setItem('farmShop_Stock', JSON.stringify(sampleStock));
     }
 
+    if (mergedTransactions.length > 0) {
+      setTransactions(mergedTransactions);
+      localStorage.setItem('farmShop_Transactions', JSON.stringify(mergedTransactions));
+    }
+
+    if (mergedStocktakes.length > 0) {
+      setStocktakes(mergedStocktakes);
+      localStorage.setItem('farmShop_Stocktakes', JSON.stringify(mergedStocktakes));
+    }
+
     setDataLoaded(true);
     console.log('✅ Data load complete!');
+  };
+
+  // Merge function - combines local and sheets data, keeping unique items
+  const mergeData = (localData, sheetsData, uniqueKey) => {
+    const merged = [...localData];
+    const existingKeys = new Set(localData.map(item => String(item[uniqueKey])));
+    
+    // Add items from sheets that don't exist locally
+    sheetsData.forEach(item => {
+      const key = String(item[uniqueKey]);
+      if (!existingKeys.has(key)) {
+        merged.push(item);
+      }
+    });
+    
+    return merged;
   };
 
   // Load data from Google Sheets using JSONP
@@ -286,29 +335,88 @@ function App() {
     }
   };
 
-  // Manual sync function - call this to force sync
+  // Manual sync function with verification
   const forceSync = async () => {
     console.log('🔄 Force syncing all data to Google Sheets...');
     
     try {
+      const results = [];
+      
+      // Save and verify Workers
       if (workers.length > 0) {
         await saveToSheets('Workers', workers);
-      }
-      if (stockData.length > 0) {
-        await saveToSheets('Stock_Master', stockData);
-      }
-      if (transactions.length > 0) {
-        await saveToSheets('Transactions', transactions);
-      }
-      if (stocktakes.length > 0) {
-        await saveToSheets('Stocktakes', stocktakes);
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for Google to process
+        try {
+          const verifyResult = await loadFromSheets('Workers');
+          const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
+          results.push({ name: 'Workers', sent: workers.length, confirmed: count });
+        } catch (e) {
+          results.push({ name: 'Workers', sent: workers.length, confirmed: 0 });
+        }
       }
       
-      alert('✅ All data synced to Google Sheets!\n\nYou can now access it on other devices.');
+      // Save and verify Stock
+      if (stockData.length > 0) {
+        await saveToSheets('Stock_Master', stockData);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+          const verifyResult = await loadFromSheets('Stock_Master');
+          const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
+          results.push({ name: 'Stock', sent: stockData.length, confirmed: count });
+        } catch (e) {
+          results.push({ name: 'Stock', sent: stockData.length, confirmed: 0 });
+        }
+      }
+      
+      // Save and verify Transactions
+      if (transactions.length > 0) {
+        await saveToSheets('Transactions', transactions);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+          const verifyResult = await loadFromSheets('Transactions');
+          const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
+          results.push({ name: 'Transactions', sent: transactions.length, confirmed: count });
+        } catch (e) {
+          results.push({ name: 'Transactions', sent: transactions.length, confirmed: 0 });
+        }
+      }
+      
+      // Save and verify Stocktakes
+      if (stocktakes.length > 0) {
+        await saveToSheets('Stocktakes', stocktakes);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+          const verifyResult = await loadFromSheets('Stocktakes');
+          const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
+          results.push({ name: 'Stocktakes', sent: stocktakes.length, confirmed: count });
+        } catch (e) {
+          results.push({ name: 'Stocktakes', sent: stocktakes.length, confirmed: 0 });
+        }
+      }
+      
+      // Build result message
+      let message = '✅ Sync Complete!\n\n';
+      let allConfirmed = true;
+      
+      results.forEach(r => {
+        const confirmed = r.confirmed === r.sent;
+        allConfirmed = allConfirmed && confirmed;
+        message += `${confirmed ? '✅' : '⚠️'} ${r.name}: ${r.confirmed}/${r.sent}\n`;
+      });
+      
+      if (allConfirmed && results.length > 0) {
+        message += '\n🎉 All data verified in Google Sheets!\n\nSafe to use on other devices.';
+      } else if (results.length === 0) {
+        message = '⚠️ No data to sync.';
+      } else {
+        message += '\n⚠️ Some data may not have synced correctly.\n\nTry "Sync Now" again or check Google Sheets manually.';
+      }
+      
+      alert(message);
       
     } catch (error) {
       console.error('Sync error:', error);
-      alert('⚠️ Some data may not have synced.\n\nCheck browser console for details.');
+      alert('⚠️ Sync failed.\n\nData is safe in browser localStorage.\n\nCheck internet connection and try again.');
     }
   };
 
