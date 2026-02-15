@@ -24,7 +24,7 @@ function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Google Apps Script configuration - UPDATE THIS URL!
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyto0ZnCYeRNgTIygiucnuuQv0J3AI9FKlneiy50B2kmmg3j8LXs6n_pQmToGnhIKdp/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbySMqXtsVghSjVeiAy8A2gCCr9qUMSejKZMwBERPmKpg6qFzVbVAdpegvVVaKCmuQ5D/exec';
   
   // Check for saved login session
   useEffect(() => {
