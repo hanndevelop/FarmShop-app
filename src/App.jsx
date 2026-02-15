@@ -24,7 +24,7 @@ function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Google Apps Script configuration - UPDATE THIS URL!
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyYMigVvX_IrESab3Pr5u9bqA3JzG0CWp9kwoqxsq5w8dDaYUonuJROHTJqdC6LVuGZ/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyto0ZnCYeRNgTIygiucnuuQv0J3AI9FKlneiy50B2kmmg3j8LXs6n_pQmToGnhIKdp/exec';
   
   // Check for saved login session
   useEffect(() => {
@@ -309,22 +309,20 @@ function App() {
     });
   };
 
-  // Save data to Google Sheets (background, doesn't block UI)
+  // Save data to Google Sheets - simplified approach
   const saveToSheets = async (sheetName, data) => {
     if (!data || data.length === 0) {
       console.log(`⏭️ Skipping save to ${sheetName} - no data`);
-      return;
+      return { success: false, message: 'No data' };
     }
     
     try {
       console.log(`💾 Saving ${data.length} items to ${sheetName}...`);
       
+      // Use fetch with redirect: 'follow' instead of no-cors
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors', // Important for Google Apps Script
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        redirect: 'follow',
         body: JSON.stringify({
           action: 'write',
           sheet: sheetName,
@@ -332,16 +330,16 @@ function App() {
         })
       });
       
-      // Note: no-cors means we can't read the response
-      // But we know it sent successfully if no error was thrown
-      console.log(`✅ Sent to ${sheetName}`);
+      console.log(`📤 Request sent to ${sheetName}`);
       
-      // Store timestamp of last sync
+      // Store timestamp
       localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+      
+      return { success: true, message: 'Sent' };
       
     } catch (error) {
       console.error(`❌ Error saving to ${sheetName}:`, error);
-      // Don't throw - data is already in localStorage
+      return { success: false, message: error.message };
     }
   };
 
@@ -349,18 +347,37 @@ function App() {
   const forceSync = async () => {
     console.log('🔄 Force syncing all data to Google Sheets...');
     
+    // Don't allow sync during initial load
+    if (!dataLoaded) {
+      alert('⚠️ Please wait...\n\nData is still loading from Google Sheets.\n\nTry again in a few seconds.');
+      return;
+    }
+    
+    // Check current data counts
+    console.log(`Current data: Workers=${workers.length}, Stock=${stockData.length}, Trans=${transactions.length}`);
+    
     // Check if we have any data to sync
     const hasData = workers.length > 0 || stockData.length > 0 || 
                     transactions.length > 0 || stocktakes.length > 0;
     
     if (!hasData) {
-      alert('⚠️ No data to sync!\n\nAdd workers or stock first, then sync.');
-      return;
-    }
-    
-    // Don't allow sync during initial load
-    if (!dataLoaded) {
-      alert('⚠️ Please wait...\n\nData is still loading from Google Sheets.');
+      // No local data - try loading from sheets first
+      alert('ℹ️ No local data found.\n\nAttempting to load from Google Sheets...');
+      
+      try {
+        await loadAllData();
+        
+        // Check again after loading
+        const hasDataNow = workers.length > 0 || stockData.length > 0;
+        
+        if (hasDataNow) {
+          alert(`✅ Loaded from Google Sheets!\n\n📊 Workers: ${workers.length}\n📦 Stock: ${stockData.length}\n\nData is now available on this device.`);
+        } else {
+          alert('⚠️ No data in Google Sheets either.\n\nAdd workers or stock first, then sync.');
+        }
+      } catch (error) {
+        alert('❌ Failed to load from Sheets.\n\nCheck internet connection.');
+      }
       return;
     }
     
@@ -371,12 +388,13 @@ function App() {
       if (workers.length > 0) {
         console.log(`📤 Syncing ${workers.length} workers...`);
         await saveToSheets('Workers', workers);
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Wait for Google to process
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
         try {
           const verifyResult = await loadFromSheets('Workers');
           const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
           results.push({ name: 'Workers', sent: workers.length, confirmed: count });
         } catch (e) {
+          console.error('Verify error:', e);
           results.push({ name: 'Workers', sent: workers.length, confirmed: 0 });
         }
       }
@@ -385,12 +403,13 @@ function App() {
       if (stockData.length > 0) {
         console.log(`📤 Syncing ${stockData.length} stock items...`);
         await saveToSheets('Stock_Master', stockData);
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         try {
           const verifyResult = await loadFromSheets('Stock_Master');
           const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
           results.push({ name: 'Stock', sent: stockData.length, confirmed: count });
         } catch (e) {
+          console.error('Verify error:', e);
           results.push({ name: 'Stock', sent: stockData.length, confirmed: 0 });
         }
       }
@@ -399,12 +418,13 @@ function App() {
       if (transactions.length > 0) {
         console.log(`📤 Syncing ${transactions.length} transactions...`);
         await saveToSheets('Transactions', transactions);
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         try {
           const verifyResult = await loadFromSheets('Transactions');
           const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
           results.push({ name: 'Transactions', sent: transactions.length, confirmed: count });
         } catch (e) {
+          console.error('Verify error:', e);
           results.push({ name: 'Transactions', sent: transactions.length, confirmed: 0 });
         }
       }
@@ -413,12 +433,13 @@ function App() {
       if (stocktakes.length > 0) {
         console.log(`📤 Syncing ${stocktakes.length} stocktakes...`);
         await saveToSheets('Stocktakes', stocktakes);
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         try {
           const verifyResult = await loadFromSheets('Stocktakes');
           const count = verifyResult.status === 'success' ? verifyResult.data.length : 0;
           results.push({ name: 'Stocktakes', sent: stocktakes.length, confirmed: count });
         } catch (e) {
+          console.error('Verify error:', e);
           results.push({ name: 'Stocktakes', sent: stocktakes.length, confirmed: 0 });
         }
       }

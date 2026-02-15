@@ -64,6 +64,157 @@ function Reports({ transactions, workers, stocktakes }) {
     return transactions.filter(t => t.workerId === workerId);
   };
 
+  const renderItemsSoldReport = () => {
+    // Filter transactions by date
+    let filteredTransactions = transactions;
+    
+    if (dateFilter.startDate && dateFilter.endDate) {
+      filteredTransactions = transactions.filter(t => {
+        const transDate = new Date(t.date);
+        const startDate = new Date(dateFilter.startDate);
+        const endDate = new Date(dateFilter.endDate);
+        return transDate >= startDate && transDate <= endDate;
+      });
+    }
+
+    // Group by item and sum quantities
+    const itemSales = {};
+    
+    filteredTransactions.forEach(t => {
+      if (!itemSales[t.itemName]) {
+        itemSales[t.itemName] = {
+          itemName: t.itemName,
+          totalQuantity: 0,
+          totalRevenue: 0,
+          transactionCount: 0
+        };
+      }
+      
+      itemSales[t.itemName].totalQuantity += t.quantity;
+      itemSales[t.itemName].totalRevenue += t.total;
+      itemSales[t.itemName].transactionCount += 1;
+    });
+
+    // Convert to array and sort by quantity sold
+    const itemsArray = Object.values(itemSales).sort((a, b) => b.totalQuantity - a.totalQuantity);
+
+    const handleExportItemsSold = () => {
+      const exportData = itemsArray.map(item => ({
+        'Item Name': item.itemName,
+        'Quantity Sold': item.totalQuantity,
+        'Total Revenue': 'R ' + item.totalRevenue.toFixed(2),
+        'Number of Sales': item.transactionCount,
+        'Avg per Sale': (item.totalQuantity / item.transactionCount).toFixed(1)
+      }));
+      
+      const dateRange = dateFilter.startDate && dateFilter.endDate 
+        ? `_${dateFilter.startDate}_to_${dateFilter.endDate}`
+        : '';
+      
+      exportToExcel(exportData, `Items_Sold${dateRange}`);
+    };
+
+    return (
+      <div className="card">
+        <div className="card-header">
+          <h3>Items Sold Report</h3>
+          <button 
+            className="btn btn-secondary"
+            onClick={handleExportItemsSold}
+            disabled={itemsArray.length === 0}
+          >
+            <Download size={20} />
+            Export to Excel
+          </button>
+        </div>
+
+        {/* Date Filter */}
+        <div className="form-row" style={{ marginBottom: '20px', backgroundColor: '#f5f5f5', padding: '16px', borderRadius: '8px' }}>
+          <div style={{ marginBottom: '12px' }}>
+            <strong>Select Period</strong>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
+              <label>Start Date</label>
+              <input
+                type="date"
+                value={dateFilter.startDate}
+                onChange={(e) => setDateFilter({...dateFilter, startDate: e.target.value})}
+              />
+            </div>
+            <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
+              <label>End Date</label>
+              <input
+                type="date"
+                value={dateFilter.endDate}
+                onChange={(e) => setDateFilter({...dateFilter, endDate: e.target.value})}
+              />
+            </div>
+            <button 
+              className="btn btn-secondary"
+              onClick={() => setDateFilter({ startDate: '', endDate: '' })}
+              style={{ marginBottom: '8px' }}
+            >
+              Clear Filter
+            </button>
+          </div>
+        </div>
+
+        {dateFilter.startDate && dateFilter.endDate && (
+          <div className="alert alert-info" style={{ marginBottom: '20px' }}>
+            📅 Period: {new Date(dateFilter.startDate).toLocaleDateString()} to {new Date(dateFilter.endDate).toLocaleDateString()}
+            <br/>
+            📊 Total Items Sold: {itemsArray.reduce((sum, item) => sum + item.totalQuantity, 0)} units
+            <br/>
+            💰 Total Revenue: R {itemsArray.reduce((sum, item) => sum + item.totalRevenue, 0).toFixed(2)}
+          </div>
+        )}
+
+        {itemsArray.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+            No sales data for the selected period
+          </div>
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Item Name</th>
+                  <th>Quantity Sold</th>
+                  <th>Total Revenue</th>
+                  <th>Number of Sales</th>
+                  <th>Avg per Sale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemsArray.map((item, index) => (
+                  <tr key={item.itemName}>
+                    <td><strong>#{index + 1}</strong></td>
+                    <td>{item.itemName}</td>
+                    <td style={{ fontWeight: 'bold' }}>{item.totalQuantity}</td>
+                    <td>R {item.totalRevenue.toFixed(2)}</td>
+                    <td>{item.transactionCount}</td>
+                    <td>{(item.totalQuantity / item.transactionCount).toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                  <td colSpan="2">TOTAL</td>
+                  <td>{itemsArray.reduce((sum, item) => sum + item.totalQuantity, 0)}</td>
+                  <td>R {itemsArray.reduce((sum, item) => sum + item.totalRevenue, 0).toFixed(2)}</td>
+                  <td>{itemsArray.reduce((sum, item) => sum + item.transactionCount, 0)}</td>
+                  <td>-</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderWorkerSummary = () => {
     // Filter transactions by month if filter is set
     let filteredTransactions = transactions;
@@ -516,6 +667,7 @@ function Reports({ transactions, workers, stocktakes }) {
             <option value="summary">Worker Monthly Summary</option>
             <option value="detail">Worker Detail</option>
             <option value="all">All Transactions</option>
+            <option value="items">Items Sold</option>
             <option value="stocktake">Stocktake Reports</option>
           </select>
         </div>
@@ -545,6 +697,7 @@ function Reports({ transactions, workers, stocktakes }) {
       {reportType === 'summary' && renderWorkerSummary()}
       {reportType === 'detail' && renderWorkerDetail()}
       {reportType === 'all' && renderAllTransactions()}
+      {reportType === 'items' && renderItemsSoldReport()}
       {reportType === 'stocktake' && renderStocktakeReports()}
     </div>
   );
