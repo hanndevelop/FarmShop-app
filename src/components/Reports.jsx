@@ -8,14 +8,12 @@ const exportToExcel = (data, filename) => {
     return;
   }
 
-  // Convert data to CSV
   const headers = Object.keys(data[0]);
   const csv = [
     headers.join(','),
     ...data.map(row => 
       headers.map(header => {
         const value = row[header];
-        // Handle values with commas or quotes
         if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
           return `"${value.replace(/"/g, '""')}"`;
         }
@@ -24,7 +22,6 @@ const exportToExcel = (data, filename) => {
     )
   ].join('\n');
 
-  // Add BOM for Excel to recognize UTF-8
   const BOM = '\uFEFF';
   const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
@@ -38,13 +35,9 @@ const exportToExcel = (data, filename) => {
 };
 
 function Reports({ transactions, workers, stocktakes }) {
-  const [reportType, setReportType] = useState('summary');
+  const [reportType, setReportType] = useState('all');
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [dateFilter, setDateFilter] = useState({
-    startDate: '',
-    endDate: ''
-  });
-  const [monthFilter, setMonthFilter] = useState({
     startDate: '',
     endDate: ''
   });
@@ -60,102 +53,66 @@ function Reports({ transactions, workers, stocktakes }) {
     });
   };
 
-  const getWorkerTransactions = (workerId) => {
-    return transactions.filter(t => t.workerId === workerId);
-  };
+  // REPORT 1: All Transactions
+  const renderAllTransactions = () => {
+    const filteredTransactions = filterTransactionsByDate(transactions);
 
-  const renderItemsSoldReport = () => {
-    // Filter transactions by date
-    let filteredTransactions = transactions;
-    
-    if (dateFilter.startDate && dateFilter.endDate) {
-      filteredTransactions = transactions.filter(t => {
-        const transDate = new Date(t.date);
-        const startDate = new Date(dateFilter.startDate);
-        const endDate = new Date(dateFilter.endDate);
-        return transDate >= startDate && transDate <= endDate;
-      });
-    }
-
-    // Group by item and sum quantities
-    const itemSales = {};
-    
-    filteredTransactions.forEach(t => {
-      if (!itemSales[t.itemName]) {
-        itemSales[t.itemName] = {
-          itemName: t.itemName,
-          totalQuantity: 0,
-          totalRevenue: 0,
-          transactionCount: 0
-        };
-      }
-      
-      itemSales[t.itemName].totalQuantity += t.quantity;
-      itemSales[t.itemName].totalRevenue += t.total;
-      itemSales[t.itemName].transactionCount += 1;
-    });
-
-    // Convert to array and sort by quantity sold
-    const itemsArray = Object.values(itemSales).sort((a, b) => b.totalQuantity - a.totalQuantity);
-
-    const handleExportItemsSold = () => {
-      const exportData = itemsArray.map(item => ({
-        'Item Name': item.itemName,
-        'Quantity Sold': item.totalQuantity,
-        'Total Revenue': 'R ' + item.totalRevenue.toFixed(2),
-        'Number of Sales': item.transactionCount,
-        'Avg per Sale': (item.totalQuantity / item.transactionCount).toFixed(1)
+    const handleExportAll = () => {
+      const exportData = filteredTransactions.map(t => ({
+        'Date': t.date,
+        'Worker': t.workerName,
+        'Item': t.itemName,
+        'Quantity': t.quantity,
+        'Price': 'R ' + t.price.toFixed(2),
+        'Total': 'R ' + t.total.toFixed(2)
       }));
       
       const dateRange = dateFilter.startDate && dateFilter.endDate 
         ? `_${dateFilter.startDate}_to_${dateFilter.endDate}`
         : '';
       
-      exportToExcel(exportData, `Items_Sold${dateRange}`);
+      exportToExcel(exportData, `All_Transactions${dateRange}`);
     };
+
+    const totalAmount = filteredTransactions.reduce((sum, t) => sum + t.total, 0);
 
     return (
       <div className="card">
         <div className="card-header">
-          <h3>Items Sold Report</h3>
+          <h3>All Transactions</h3>
           <button 
             className="btn btn-secondary"
-            onClick={handleExportItemsSold}
-            disabled={itemsArray.length === 0}
+            onClick={handleExportAll}
+            disabled={filteredTransactions.length === 0}
           >
             <Download size={20} />
             Export to Excel
           </button>
         </div>
 
-        {/* Date Filter */}
-        <div className="form-row" style={{ marginBottom: '20px', backgroundColor: '#f5f5f5', padding: '16px', borderRadius: '8px' }}>
-          <div style={{ marginBottom: '12px' }}>
-            <strong>Select Period</strong>
+        <div className="form-row" style={{ marginBottom: '20px' }}>
+          <div className="form-group">
+            <label>Start Date</label>
+            <input
+              type="date"
+              value={dateFilter.startDate}
+              onChange={(e) => setDateFilter({...dateFilter, startDate: e.target.value})}
+            />
           </div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
-              <label>Start Date</label>
-              <input
-                type="date"
-                value={dateFilter.startDate}
-                onChange={(e) => setDateFilter({...dateFilter, startDate: e.target.value})}
-              />
-            </div>
-            <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
-              <label>End Date</label>
-              <input
-                type="date"
-                value={dateFilter.endDate}
-                onChange={(e) => setDateFilter({...dateFilter, endDate: e.target.value})}
-              />
-            </div>
+          <div className="form-group">
+            <label>End Date</label>
+            <input
+              type="date"
+              value={dateFilter.endDate}
+              onChange={(e) => setDateFilter({...dateFilter, endDate: e.target.value})}
+            />
+          </div>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button 
               className="btn btn-secondary"
               onClick={() => setDateFilter({ startDate: '', endDate: '' })}
-              style={{ marginBottom: '8px' }}
             >
-              Clear Filter
+              Clear
             </button>
           </div>
         </div>
@@ -164,48 +121,43 @@ function Reports({ transactions, workers, stocktakes }) {
           <div className="alert alert-info" style={{ marginBottom: '20px' }}>
             📅 Period: {new Date(dateFilter.startDate).toLocaleDateString()} to {new Date(dateFilter.endDate).toLocaleDateString()}
             <br/>
-            📊 Total Items Sold: {itemsArray.reduce((sum, item) => sum + item.totalQuantity, 0)} units
-            <br/>
-            💰 Total Revenue: R {itemsArray.reduce((sum, item) => sum + item.totalRevenue, 0).toFixed(2)}
+            💰 Total: R {totalAmount.toFixed(2)}
           </div>
         )}
 
-        {itemsArray.length === 0 ? (
+        {filteredTransactions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-            No sales data for the selected period
+            No transactions found
           </div>
         ) : (
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Rank</th>
-                  <th>Item Name</th>
-                  <th>Quantity Sold</th>
-                  <th>Total Revenue</th>
-                  <th>Number of Sales</th>
-                  <th>Avg per Sale</th>
+                  <th>Date</th>
+                  <th>Worker</th>
+                  <th>Item</th>
+                  <th>Quantity</th>
+                  <th>Price</th>
+                  <th>Total</th>
                 </tr>
               </thead>
               <tbody>
-                {itemsArray.map((item, index) => (
-                  <tr key={item.itemName}>
-                    <td><strong>#{index + 1}</strong></td>
-                    <td>{item.itemName}</td>
-                    <td style={{ fontWeight: 'bold' }}>{item.totalQuantity}</td>
-                    <td>R {item.totalRevenue.toFixed(2)}</td>
-                    <td>{item.transactionCount}</td>
-                    <td>{(item.totalQuantity / item.transactionCount).toFixed(1)}</td>
+                {filteredTransactions.map((t, index) => (
+                  <tr key={index}>
+                    <td>{t.date}</td>
+                    <td>{t.workerName}</td>
+                    <td>{t.itemName}</td>
+                    <td>{t.quantity}</td>
+                    <td>R {t.price.toFixed(2)}</td>
+                    <td>R {t.total.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr style={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
-                  <td colSpan="2">TOTAL</td>
-                  <td>{itemsArray.reduce((sum, item) => sum + item.totalQuantity, 0)}</td>
-                  <td>R {itemsArray.reduce((sum, item) => sum + item.totalRevenue, 0).toFixed(2)}</td>
-                  <td>{itemsArray.reduce((sum, item) => sum + item.transactionCount, 0)}</td>
-                  <td>-</td>
+                  <td colSpan="5">TOTAL</td>
+                  <td style={{ fontSize: '18px' }}>R {totalAmount.toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -215,20 +167,10 @@ function Reports({ transactions, workers, stocktakes }) {
     );
   };
 
+  // REPORT 2: Worker Summary (Monthly)
   const renderWorkerSummary = () => {
-    // Filter transactions by month if filter is set
-    let filteredTransactions = transactions;
-    
-    if (monthFilter.startDate && monthFilter.endDate) {
-      filteredTransactions = transactions.filter(t => {
-        const transDate = new Date(t.date);
-        const startDate = new Date(monthFilter.startDate);
-        const endDate = new Date(monthFilter.endDate);
-        return transDate >= startDate && transDate <= endDate;
-      });
-    }
+    const filteredTransactions = filterTransactionsByDate(transactions);
 
-    // Group by worker
     const workerSummaries = workers.map(worker => {
       const workerTrans = filteredTransactions.filter(t => t.workerId === worker.id);
       const total = workerTrans.reduce((sum, t) => sum + t.total, 0);
@@ -236,7 +178,7 @@ function Reports({ transactions, workers, stocktakes }) {
         workerId: worker.id,
         workerName: worker.name,
         farmId: worker.farmId || '-',
-        idNumber: worker.idNumber || '-',
+        houseNumber: worker.houseNumber || '-',
         transactionCount: workerTrans.length,
         totalAmount: total
       };
@@ -246,22 +188,24 @@ function Reports({ transactions, workers, stocktakes }) {
       const exportData = workerSummaries.map(w => ({
         'Worker Name': w.workerName,
         'Farm ID': w.farmId,
-        'ID Number': w.idNumber,
+        'House Number': w.houseNumber,
         'Transactions': w.transactionCount,
         'Total Amount': 'R ' + w.totalAmount.toFixed(2)
       }));
       
-      const dateRange = monthFilter.startDate && monthFilter.endDate 
-        ? `_${monthFilter.startDate}_to_${monthFilter.endDate}`
+      const dateRange = dateFilter.startDate && dateFilter.endDate 
+        ? `_${dateFilter.startDate}_to_${dateFilter.endDate}`
         : '';
       
       exportToExcel(exportData, `Worker_Summary${dateRange}`);
     };
 
+    const grandTotal = workerSummaries.reduce((sum, w) => sum + w.totalAmount, 0);
+
     return (
       <div className="card">
         <div className="card-header">
-          <h3>Worker Monthly Summary</h3>
+          <h3>Worker Summary</h3>
           <button 
             className="btn btn-secondary"
             onClick={handleExportSummary}
@@ -272,44 +216,38 @@ function Reports({ transactions, workers, stocktakes }) {
           </button>
         </div>
 
-        {/* Farm Month Filter (15th to 15th) */}
-        <div className="form-row" style={{ marginBottom: '20px', backgroundColor: '#f5f5f5', padding: '16px', borderRadius: '8px' }}>
-          <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Calendar size={20} color="#2c5530" />
-            <strong>Farm Month Filter (15th to 15th)</strong>
+        <div className="form-row" style={{ marginBottom: '20px' }}>
+          <div className="form-group">
+            <label>Start Date</label>
+            <input
+              type="date"
+              value={dateFilter.startDate}
+              onChange={(e) => setDateFilter({...dateFilter, startDate: e.target.value})}
+            />
           </div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
-              <label>Start Date (e.g., Jan 15)</label>
-              <input
-                type="date"
-                value={monthFilter.startDate}
-                onChange={(e) => setMonthFilter({...monthFilter, startDate: e.target.value})}
-              />
-            </div>
-            <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
-              <label>End Date (e.g., Feb 15)</label>
-              <input
-                type="date"
-                value={monthFilter.endDate}
-                onChange={(e) => setMonthFilter({...monthFilter, endDate: e.target.value})}
-              />
-            </div>
+          <div className="form-group">
+            <label>End Date</label>
+            <input
+              type="date"
+              value={dateFilter.endDate}
+              onChange={(e) => setDateFilter({...dateFilter, endDate: e.target.value})}
+            />
+          </div>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button 
               className="btn btn-secondary"
-              onClick={() => setMonthFilter({ startDate: '', endDate: '' })}
-              style={{ marginBottom: '8px' }}
+              onClick={() => setDateFilter({ startDate: '', endDate: '' })}
             >
-              Clear Filter
+              Clear
             </button>
           </div>
         </div>
 
-        {monthFilter.startDate && monthFilter.endDate && (
+        {dateFilter.startDate && dateFilter.endDate && (
           <div className="alert alert-info" style={{ marginBottom: '20px' }}>
-            📅 Showing transactions from {new Date(monthFilter.startDate).toLocaleDateString()} to {new Date(monthFilter.endDate).toLocaleDateString()}
+            📅 Period: {new Date(dateFilter.startDate).toLocaleDateString()} to {new Date(dateFilter.endDate).toLocaleDateString()}
             <br/>
-            Total: R {workerSummaries.reduce((sum, w) => sum + w.totalAmount, 0).toFixed(2)}
+            💰 Total: R {grandTotal.toFixed(2)}
           </div>
         )}
 
@@ -324,7 +262,7 @@ function Reports({ transactions, workers, stocktakes }) {
                 <tr>
                   <th>Worker Name</th>
                   <th>Farm ID</th>
-                  <th>ID Number</th>
+                  <th>House Number</th>
                   <th>Transactions</th>
                   <th>Total Amount</th>
                 </tr>
@@ -334,7 +272,7 @@ function Reports({ transactions, workers, stocktakes }) {
                   <tr key={worker.workerId}>
                     <td><strong>{worker.workerName}</strong></td>
                     <td>{worker.farmId}</td>
-                    <td>{worker.idNumber}</td>
+                    <td>{worker.houseNumber}</td>
                     <td>{worker.transactionCount}</td>
                     <td style={{ fontWeight: 'bold', fontSize: '16px' }}>
                       R {worker.totalAmount.toFixed(2)}
@@ -347,7 +285,7 @@ function Reports({ transactions, workers, stocktakes }) {
                   <td colSpan="3">TOTAL</td>
                   <td>{workerSummaries.reduce((sum, w) => sum + w.transactionCount, 0)}</td>
                   <td style={{ fontSize: '18px' }}>
-                    R {workerSummaries.reduce((sum, w) => sum + w.totalAmount, 0).toFixed(2)}
+                    R {grandTotal.toFixed(2)}
                   </td>
                 </tr>
               </tfoot>
@@ -358,10 +296,31 @@ function Reports({ transactions, workers, stocktakes }) {
     );
   };
 
+  // REPORT 3: Worker Detail
   const renderWorkerDetail = () => {
     if (!selectedWorker) {
       return (
         <div className="card">
+          <div className="card-header">
+            <h3>Worker Detail</h3>
+          </div>
+          <div className="form-group">
+            <label>Select Worker</label>
+            <select
+              value=""
+              onChange={(e) => {
+                const worker = workers.find(w => w.id === parseInt(e.target.value));
+                setSelectedWorker(worker);
+              }}
+            >
+              <option value="">Choose a worker</option>
+              {workers.map(worker => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.name} ({worker.farmId})
+                </option>
+              ))}
+            </select>
+          </div>
           <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
             <User size={48} />
             <p style={{ marginTop: '16px' }}>Select a worker to view details</p>
@@ -370,7 +329,7 @@ function Reports({ transactions, workers, stocktakes }) {
       );
     }
 
-    const workerTransactions = getWorkerTransactions(selectedWorker.id);
+    const workerTransactions = transactions.filter(t => t.workerId === selectedWorker.id);
     const filteredTransactions = filterTransactionsByDate(workerTransactions);
     const total = filteredTransactions.reduce((sum, t) => sum + t.total, 0);
 
@@ -389,7 +348,7 @@ function Reports({ transactions, workers, stocktakes }) {
     return (
       <div className="card">
         <div className="card-header">
-          <h3>{selectedWorker.name} - Transaction History</h3>
+          <h3>Worker Detail: {selectedWorker.name}</h3>
           <button 
             className="btn btn-secondary"
             onClick={handleExportWorkerDetail}
@@ -400,12 +359,35 @@ function Reports({ transactions, workers, stocktakes }) {
           </button>
         </div>
 
-        <div className="alert alert-info">
+        <div className="form-group">
+          <label>Select Worker</label>
+          <select
+            value={selectedWorker.id}
+            onChange={(e) => {
+              const worker = workers.find(w => w.id === parseInt(e.target.value));
+              setSelectedWorker(worker);
+            }}
+          >
+            <option value="">Choose a worker</option>
+            {workers.map(worker => (
+              <option key={worker.id} value={worker.id}>
+                {worker.name} ({worker.farmId})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="alert alert-info" style={{ marginBottom: '20px' }}>
           <User size={20} />
           <div>
             <div><strong>{selectedWorker.name}</strong></div>
             <div style={{ fontSize: '14px' }}>Farm ID: {selectedWorker.farmId}</div>
-            <div style={{ fontSize: '14px' }}>Total Outstanding: R {total.toFixed(2)}</div>
+            {selectedWorker.houseNumber && (
+              <div style={{ fontSize: '14px' }}>House: {selectedWorker.houseNumber}</div>
+            )}
+            <div style={{ fontSize: '14px', marginTop: '8px', fontWeight: 'bold' }}>
+              Total Outstanding: R {total.toFixed(2)}
+            </div>
           </div>
         </div>
 
@@ -476,30 +458,57 @@ function Reports({ transactions, workers, stocktakes }) {
     );
   };
 
-  const renderAllTransactions = () => {
+  // REPORT 4: Stock Report (Items Sold)
+  const renderItemsSoldReport = () => {
     const filteredTransactions = filterTransactionsByDate(transactions);
 
-    const handleExportAllTransactions = () => {
-      const exportData = filteredTransactions.map(t => ({
-        'Date': t.date,
-        'Worker': t.workerName,
-        'Item': t.itemName,
-        'Quantity': t.quantity,
-        'Price': 'R ' + t.price.toFixed(2),
-        'Total': 'R ' + t.total.toFixed(2)
+    // Group by item and sum quantities
+    const itemSales = {};
+    
+    filteredTransactions.forEach(t => {
+      if (!itemSales[t.itemName]) {
+        itemSales[t.itemName] = {
+          itemName: t.itemName,
+          totalQuantity: 0,
+          totalRevenue: 0,
+          transactionCount: 0
+        };
+      }
+      
+      itemSales[t.itemName].totalQuantity += t.quantity;
+      itemSales[t.itemName].totalRevenue += t.total;
+      itemSales[t.itemName].transactionCount += 1;
+    });
+
+    const itemsArray = Object.values(itemSales).sort((a, b) => b.totalQuantity - a.totalQuantity);
+
+    const handleExportItemsSold = () => {
+      const exportData = itemsArray.map(item => ({
+        'Item Name': item.itemName,
+        'Quantity Sold': item.totalQuantity,
+        'Total Revenue': 'R ' + item.totalRevenue.toFixed(2),
+        'Number of Sales': item.transactionCount,
+        'Avg per Sale': (item.totalQuantity / item.transactionCount).toFixed(1)
       }));
       
-      exportToExcel(exportData, 'All_Transactions');
+      const dateRange = dateFilter.startDate && dateFilter.endDate 
+        ? `_${dateFilter.startDate}_to_${dateFilter.endDate}`
+        : '';
+      
+      exportToExcel(exportData, `Items_Sold${dateRange}`);
     };
+
+    const totalQty = itemsArray.reduce((sum, item) => sum + item.totalQuantity, 0);
+    const totalRev = itemsArray.reduce((sum, item) => sum + item.totalRevenue, 0);
 
     return (
       <div className="card">
         <div className="card-header">
-          <h3>All Transactions</h3>
+          <h3>Stock Report - Items Sold</h3>
           <button 
             className="btn btn-secondary"
-            onClick={handleExportAllTransactions}
-            disabled={filteredTransactions.length === 0}
+            onClick={handleExportItemsSold}
+            disabled={itemsArray.length === 0}
           >
             <Download size={20} />
             Export to Excel
@@ -533,113 +542,57 @@ function Reports({ transactions, workers, stocktakes }) {
           </div>
         </div>
 
-        {filteredTransactions.length === 0 ? (
+        {dateFilter.startDate && dateFilter.endDate && (
+          <div className="alert alert-info" style={{ marginBottom: '20px' }}>
+            📅 Period: {new Date(dateFilter.startDate).toLocaleDateString()} to {new Date(dateFilter.endDate).toLocaleDateString()}
+            <br/>
+            📊 Total Units Sold: {totalQty}
+            <br/>
+            💰 Total Revenue: R {totalRev.toFixed(2)}
+          </div>
+        )}
+
+        {itemsArray.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-            No transactions found
+            No sales data for the selected period
           </div>
         ) : (
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Worker</th>
-                  <th>Item</th>
-                  <th>Quantity</th>
-                  <th>Price</th>
-                  <th>Total</th>
+                  <th>Rank</th>
+                  <th>Item Name</th>
+                  <th>Quantity Sold</th>
+                  <th>Total Revenue</th>
+                  <th>Number of Sales</th>
+                  <th>Avg per Sale</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.map((t, index) => (
-                  <tr key={index}>
-                    <td>{t.date}</td>
-                    <td>{t.workerName}</td>
-                    <td>{t.itemName}</td>
-                    <td>{t.quantity}</td>
-                    <td>R {t.price.toFixed(2)}</td>
-                    <td>R {t.total.toFixed(2)}</td>
+                {itemsArray.map((item, index) => (
+                  <tr key={item.itemName}>
+                    <td><strong>#{index + 1}</strong></td>
+                    <td>{item.itemName}</td>
+                    <td style={{ fontWeight: 'bold' }}>{item.totalQuantity}</td>
+                    <td>R {item.totalRevenue.toFixed(2)}</td>
+                    <td>{item.transactionCount}</td>
+                    <td>{(item.totalQuantity / item.transactionCount).toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                  <td colSpan="2">TOTAL</td>
+                  <td>{totalQty}</td>
+                  <td>R {totalRev.toFixed(2)}</td>
+                  <td>{itemsArray.reduce((sum, item) => sum + item.transactionCount, 0)}</td>
+                  <td>-</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
-      </div>
-    );
-  };
-
-  const renderStocktakeReports = () => {
-    if (stocktakes.length === 0) {
-      return (
-        <div className="card">
-          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-            No stocktakes recorded yet
-          </div>
-        </div>
-      );
-    }
-
-    const latestStocktake = stocktakes[stocktakes.length - 1];
-
-    const handleExportStocktake = () => {
-      const exportData = stocktakes.map(s => ({
-        'Date': s.date,
-        'Type': s.type,
-        'Item': s.itemName,
-        'System Qty': s.systemQty,
-        'Actual Qty': s.actualQty,
-        'Variance': s.variance,
-        'Value': 'R ' + (s.varianceValue || 0).toFixed(2)
-      }));
-      
-      exportToExcel(exportData, 'Stocktake_Report');
-    };
-
-    return (
-      <div className="card">
-        <div className="card-header">
-          <h3>Stocktake Reports</h3>
-          <button 
-            className="btn btn-secondary"
-            onClick={handleExportStocktake}
-          >
-            <Download size={20} />
-            Export to Excel
-          </button>
-        </div>
-
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Item</th>
-                <th>System Qty</th>
-                <th>Actual Qty</th>
-                <th>Variance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stocktakes.map((s, index) => (
-                <tr key={index}>
-                  <td>{s.date}</td>
-                  <td>{s.type}</td>
-                  <td>{s.itemName}</td>
-                  <td>{s.systemQty}</td>
-                  <td>{s.actualQty}</td>
-                  <td style={{ 
-                    color: s.variance === 0 ? '#2e7d32' : '#c62828',
-                    fontWeight: 'bold'
-                  }}>
-                    {s.variance > 0 ? '+' : ''}{s.variance}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
     );
   };
@@ -661,44 +614,21 @@ function Reports({ transactions, workers, stocktakes }) {
               setReportType(e.target.value);
               setSelectedWorker(null);
               setDateFilter({ startDate: '', endDate: '' });
-              setMonthFilter({ startDate: '', endDate: '' });
             }}
           >
-            <option value="summary">Worker Monthly Summary</option>
-            <option value="detail">Worker Detail</option>
             <option value="all">All Transactions</option>
-            <option value="items">Items Sold</option>
-            <option value="stocktake">Stocktake Reports</option>
+            <option value="summary">Worker Summary</option>
+            <option value="detail">Worker Detail</option>
+            <option value="stock">Stock Report (Items Sold)</option>
           </select>
         </div>
-
-        {reportType === 'detail' && (
-          <div className="form-group">
-            <label>Select Worker</label>
-            <select
-              value={selectedWorker?.id || ''}
-              onChange={(e) => {
-                const worker = workers.find(w => w.id === parseInt(e.target.value));
-                setSelectedWorker(worker);
-              }}
-            >
-              <option value="">Choose a worker</option>
-              {workers.map(worker => (
-                <option key={worker.id} value={worker.id}>
-                  {worker.name} ({worker.farmId})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Render Selected Report */}
+      {reportType === 'all' && renderAllTransactions()}
       {reportType === 'summary' && renderWorkerSummary()}
       {reportType === 'detail' && renderWorkerDetail()}
-      {reportType === 'all' && renderAllTransactions()}
-      {reportType === 'items' && renderItemsSoldReport()}
-      {reportType === 'stocktake' && renderStocktakeReports()}
+      {reportType === 'stock' && renderItemsSoldReport()}
     </div>
   );
 }
