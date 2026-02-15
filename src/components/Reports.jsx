@@ -34,7 +34,7 @@ const exportToExcel = (data, filename) => {
   document.body.removeChild(link);
 };
 
-function Reports({ transactions, workers, stocktakes }) {
+function Reports({ transactions, workers, stocktakes, stockData }) {
   const [reportType, setReportType] = useState('all');
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [dateFilter, setDateFilter] = useState({
@@ -43,14 +43,49 @@ function Reports({ transactions, workers, stocktakes }) {
   });
 
   const filterTransactionsByDate = (trans) => {
-    if (!dateFilter.startDate || !dateFilter.endDate) return trans;
+    // If no dates selected, return all
+    if (!dateFilter.startDate && !dateFilter.endDate) {
+      console.log('No date filter applied - returning all transactions');
+      return trans;
+    }
     
-    return trans.filter(t => {
+    const filtered = trans.filter(t => {
       const transDate = new Date(t.date);
+      
+      // If only start date provided
+      if (dateFilter.startDate && !dateFilter.endDate) {
+        const startDate = new Date(dateFilter.startDate);
+        const isAfterStart = transDate >= startDate;
+        if (!isAfterStart) {
+          console.log(`Filtered OUT: ${t.date} (before ${dateFilter.startDate})`);
+        }
+        return isAfterStart;
+      }
+      
+      // If only end date provided
+      if (!dateFilter.startDate && dateFilter.endDate) {
+        const endDate = new Date(dateFilter.endDate);
+        const isBeforeEnd = transDate <= endDate;
+        if (!isBeforeEnd) {
+          console.log(`Filtered OUT: ${t.date} (after ${dateFilter.endDate})`);
+        }
+        return isBeforeEnd;
+      }
+      
+      // Both dates provided
       const startDate = new Date(dateFilter.startDate);
       const endDate = new Date(dateFilter.endDate);
-      return transDate >= startDate && transDate <= endDate;
+      const isInRange = transDate >= startDate && transDate <= endDate;
+      
+      if (!isInRange) {
+        console.log(`Filtered OUT: ${t.date} (outside ${dateFilter.startDate} to ${dateFilter.endDate})`);
+      }
+      
+      return isInRange;
     });
+    
+    console.log(`Date filter: ${trans.length} → ${filtered.length} transactions`);
+    return filtered;
   };
 
   // REPORT 1: All Transactions
@@ -170,10 +205,12 @@ function Reports({ transactions, workers, stocktakes }) {
   // REPORT 2: Worker Summary (Monthly)
   const renderWorkerSummary = () => {
     const filteredTransactions = filterTransactionsByDate(transactions);
-
+    
+    // Show ALL workers, even those with R0
     const workerSummaries = workers.map(worker => {
       const workerTrans = filteredTransactions.filter(t => t.workerId === worker.id);
       const total = workerTrans.reduce((sum, t) => sum + t.total, 0);
+      
       return {
         workerId: worker.id,
         workerName: worker.name,
@@ -182,7 +219,8 @@ function Reports({ transactions, workers, stocktakes }) {
         transactionCount: workerTrans.length,
         totalAmount: total
       };
-    }).filter(w => w.totalAmount > 0);
+    });
+    // REMOVED: .filter(w => w.totalAmount > 0) - now shows ALL workers!
 
     const handleExportSummary = () => {
       const exportData = workerSummaries.map(w => ({
@@ -462,7 +500,7 @@ function Reports({ transactions, workers, stocktakes }) {
   const renderItemsSoldReport = () => {
     const filteredTransactions = filterTransactionsByDate(transactions);
 
-    // Group by item and sum quantities
+    // Group by item and calculate totals
     const itemSales = {};
     
     filteredTransactions.forEach(t => {
@@ -470,36 +508,42 @@ function Reports({ transactions, workers, stocktakes }) {
         itemSales[t.itemName] = {
           itemName: t.itemName,
           totalQuantity: 0,
-          totalRevenue: 0,
-          transactionCount: 0
+          costPriceTotal: 0,
+          sellPriceTotal: 0
         };
       }
       
+      // Find the stock item to get cost price
+      const stockItem = stockData.find(s => s.name === t.itemName);
+      const costPrice = stockItem ? stockItem.costPrice : 0;
+      
       itemSales[t.itemName].totalQuantity += t.quantity;
-      itemSales[t.itemName].totalRevenue += t.total;
-      itemSales[t.itemName].transactionCount += 1;
+      itemSales[t.itemName].costPriceTotal += (costPrice * t.quantity);
+      itemSales[t.itemName].sellPriceTotal += t.total; // Already calculated sell price
     });
 
     const itemsArray = Object.values(itemSales).sort((a, b) => b.totalQuantity - a.totalQuantity);
 
     const handleExportItemsSold = () => {
       const exportData = itemsArray.map(item => ({
-        'Item Name': item.itemName,
-        'Quantity Sold': item.totalQuantity,
-        'Total Revenue': 'R ' + item.totalRevenue.toFixed(2),
-        'Number of Sales': item.transactionCount,
-        'Avg per Sale': (item.totalQuantity / item.transactionCount).toFixed(1)
+        'Item': item.itemName,
+        'Total Sold': item.totalQuantity,
+        'Cost Price Total': 'R ' + item.costPriceTotal.toFixed(2),
+        'Sell Price Total': 'R ' + item.sellPriceTotal.toFixed(2),
+        'Profit': 'R ' + (item.sellPriceTotal - item.costPriceTotal).toFixed(2)
       }));
       
       const dateRange = dateFilter.startDate && dateFilter.endDate 
         ? `_${dateFilter.startDate}_to_${dateFilter.endDate}`
         : '';
       
-      exportToExcel(exportData, `Items_Sold${dateRange}`);
+      exportToExcel(exportData, `Stock_Report${dateRange}`);
     };
 
     const totalQty = itemsArray.reduce((sum, item) => sum + item.totalQuantity, 0);
-    const totalRev = itemsArray.reduce((sum, item) => sum + item.totalRevenue, 0);
+    const totalCost = itemsArray.reduce((sum, item) => sum + item.costPriceTotal, 0);
+    const totalSell = itemsArray.reduce((sum, item) => sum + item.sellPriceTotal, 0);
+    const totalProfit = totalSell - totalCost;
 
     return (
       <div className="card">
@@ -548,7 +592,9 @@ function Reports({ transactions, workers, stocktakes }) {
             <br/>
             📊 Total Units Sold: {totalQty}
             <br/>
-            💰 Total Revenue: R {totalRev.toFixed(2)}
+            💰 Total Revenue: R {totalSell.toFixed(2)}
+            <br/>
+            💵 Total Profit: R {totalProfit.toFixed(2)}
           </div>
         )}
 
@@ -561,33 +607,44 @@ function Reports({ transactions, workers, stocktakes }) {
             <table>
               <thead>
                 <tr>
-                  <th>Rank</th>
-                  <th>Item Name</th>
-                  <th>Quantity Sold</th>
-                  <th>Total Revenue</th>
-                  <th>Number of Sales</th>
-                  <th>Avg per Sale</th>
+                  <th>Item</th>
+                  <th>Total Sold</th>
+                  <th>Cost Price Total</th>
+                  <th>Sell Price Total</th>
+                  <th>Profit</th>
                 </tr>
               </thead>
               <tbody>
-                {itemsArray.map((item, index) => (
-                  <tr key={item.itemName}>
-                    <td><strong>#{index + 1}</strong></td>
-                    <td>{item.itemName}</td>
-                    <td style={{ fontWeight: 'bold' }}>{item.totalQuantity}</td>
-                    <td>R {item.totalRevenue.toFixed(2)}</td>
-                    <td>{item.transactionCount}</td>
-                    <td>{(item.totalQuantity / item.transactionCount).toFixed(1)}</td>
-                  </tr>
-                ))}
+                {itemsArray.map((item) => {
+                  const profit = item.sellPriceTotal - item.costPriceTotal;
+                  return (
+                    <tr key={item.itemName}>
+                      <td><strong>{item.itemName}</strong></td>
+                      <td style={{ fontWeight: 'bold' }}>{item.totalQuantity}</td>
+                      <td>R {item.costPriceTotal.toFixed(2)}</td>
+                      <td>R {item.sellPriceTotal.toFixed(2)}</td>
+                      <td style={{ 
+                        fontWeight: 'bold',
+                        color: profit > 0 ? '#2e7d32' : '#c62828'
+                      }}>
+                        R {profit.toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr style={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
-                  <td colSpan="2">TOTAL</td>
+                  <td>TOTAL</td>
                   <td>{totalQty}</td>
-                  <td>R {totalRev.toFixed(2)}</td>
-                  <td>{itemsArray.reduce((sum, item) => sum + item.transactionCount, 0)}</td>
-                  <td>-</td>
+                  <td>R {totalCost.toFixed(2)}</td>
+                  <td>R {totalSell.toFixed(2)}</td>
+                  <td style={{ 
+                    fontSize: '18px',
+                    color: totalProfit > 0 ? '#2e7d32' : '#c62828'
+                  }}>
+                    R {totalProfit.toFixed(2)}
+                  </td>
                 </tr>
               </tfoot>
             </table>

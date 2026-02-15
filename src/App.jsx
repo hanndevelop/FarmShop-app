@@ -492,7 +492,7 @@ function App() {
       case 'stocktake':
         return <Stocktake stockData={stockData} stocktakes={stocktakes} setStocktakes={setStocktakes} />;
       case 'reports':
-        return <Reports transactions={transactions} workers={workers} stocktakes={stocktakes} />;
+        return <Reports transactions={transactions} workers={workers} stocktakes={stocktakes} stockData={stockData} />;
       default:
         return <Dashboard stockData={stockData} transactions={transactions} onForceSync={forceSync} />;
     }
