@@ -112,7 +112,7 @@ const generateTillSlipPDF = (worker, transactions, startDate, endDate) => {
     ]);
     
     // Add table
-    doc.autoTable({
+    autoTable(doc, {
       startY: tableStartY + 4,
       head: [['Item', 'Qty', 'Amount']],
       body: tableData,
