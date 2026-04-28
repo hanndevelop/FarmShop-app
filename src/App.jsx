@@ -257,12 +257,11 @@ function App() {
         const workersResult = await loadFromSheets('Workers');
         if (workersResult.status === 'success' && workersResult.data.length > 0) {
           pulled.workers = workersResult.data.length;
-          setWorkers(prev => {
-            const sheetsKeys = new Set(workersResult.data.map(i => String(i['farmId'])));
-            const localOnly = prev.filter(i => !sheetsKeys.has(String(i['farmId'])));
-            const merged = [...workersResult.data, ...localOnly];
-            localStorage.setItem('farmShop_Workers', JSON.stringify(merged));
-            return merged;
+          // REPLACE with Sheets data — Sheets is source of truth for workers.
+          // Do NOT merge with local: deleted workers must stay deleted.
+          setWorkers(() => {
+            localStorage.setItem('farmShop_Workers', JSON.stringify(workersResult.data));
+            return workersResult.data;
           });
         }
       } catch (e) { console.error('Pull workers error:', e); }
@@ -294,18 +293,11 @@ function App() {
 
       localStorage.setItem('farmShop_Workers_lastPull', new Date().toISOString());
       if (!silent) {
-        alert(`✅ Pull from Sheets complete!
-
-☁️ Workers in Sheets: ${pulled.workers}
-☁️ Stock in Sheets: ${pulled.stock}
-
-Any records added directly in Google Sheets are now on this device.`);
+        alert(`✅ Pull from Sheets complete!\n\n☁️ Workers in Sheets: ${pulled.workers}\n☁️ Stock in Sheets: ${pulled.stock}\n\nAny records added directly in Google Sheets are now on this device.`);
       }
     } catch (error) {
       console.error('Pull error:', error);
-      if (!silent) alert(`❌ Pull failed.
-
-Check internet connection and try again.`);
+      if (!silent) alert('❌ Pull failed.\n\nCheck internet connection and try again.');
     }
   };
 
