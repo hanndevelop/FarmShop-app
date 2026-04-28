@@ -374,7 +374,8 @@ function App() {
   };
 
   // Save data to Google Sheets using GET (more reliable than POST)
-  // Workers & Stock use 'upsert' - add new, update existing, NEVER delete
+  // Workers use 'write' - full overwrite so deleted workers are removed from Sheets
+  // Stock_Master uses 'upsert' - add new, update existing, never wipe stock history
   // Transactions & Stocktakes use 'append' - only add records that don't exist yet
   const saveToSheets = async (sheetName, data) => {
     if (!data || data.length === 0) {
@@ -383,8 +384,10 @@ function App() {
     }
     
     // Determine sync action based on sheet type
-    const syncAction = (sheetName === 'Workers' || sheetName === 'Stock_Master')
-      ? 'upsert'   // Add new + update existing records, never wipe
+    const syncAction = sheetName === 'Workers'
+      ? 'write'    // Full overwrite - ensures deleted workers are removed from Sheets
+      : sheetName === 'Stock_Master'
+      ? 'upsert'   // Add new + update existing stock records, never wipe
       : 'append';  // Only add new records (transactions/stocktakes are history)
     
     try {
