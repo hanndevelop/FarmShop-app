@@ -24,7 +24,7 @@ function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Google Apps Script configuration - UPDATE THIS URL!
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbySMqXtsVghSjVeiAy8A2gCCr9qUMSejKZMwBERPmKpg6qFzVbVAdpegvVVaKCmuQ5D/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwtUwmvIPT3oLOAEH7ky8FeebHUeaowLAZZF-TBYYTx4UeCNGqJ4A579Jeun1YOiX5Y/exec';
   
   // Check for saved login session
   useEffect(() => {
@@ -309,7 +309,7 @@ function App() {
     });
   };
 
-  // Save data to Google Sheets - simplified approach
+  // Save data to Google Sheets using GET (more reliable than POST)
   const saveToSheets = async (sheetName, data) => {
     if (!data || data.length === 0) {
       console.log(`⏭️ Skipping save to ${sheetName} - no data`);
@@ -319,23 +319,45 @@ function App() {
     try {
       console.log(`💾 Saving ${data.length} items to ${sheetName}...`);
       
-      // Use fetch with redirect: 'follow' instead of no-cors
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        body: JSON.stringify({
-          action: 'write',
-          sheet: sheetName,
-          rows: data
-        })
+      // Use GET with data in URL parameter (more reliable)
+      const dataString = encodeURIComponent(JSON.stringify({
+        action: 'write',
+        sheet: sheetName,
+        rows: data
+      }));
+      
+      const url = `${APPS_SCRIPT_URL}?saveData=${dataString}`;
+      
+      // Create a script tag to make the request
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          console.log(`⏱️ Timeout saving to ${sheetName}`);
+          localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+          resolve({ success: true, message: 'Sent (timeout)' });
+        }, 10000);
+
+        const script = document.createElement('script');
+        const callbackName = 'saveCallback_' + Date.now();
+        
+        window[callbackName] = function(response) {
+          clearTimeout(timeout);
+          delete window[callbackName];
+          document.body.removeChild(script);
+          
+          console.log(`📤 Response from ${sheetName}:`, response);
+          localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+          resolve({ success: true, message: 'Saved' });
+        };
+        
+        script.src = url + `&callback=${callbackName}`;
+        script.onerror = () => {
+          clearTimeout(timeout);
+          console.error(`❌ Error saving to ${sheetName}`);
+          reject(new Error('Script load failed'));
+        };
+        
+        document.body.appendChild(script);
       });
-      
-      console.log(`📤 Request sent to ${sheetName}`);
-      
-      // Store timestamp
-      localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
-      
-      return { success: true, message: 'Sent' };
       
     } catch (error) {
       console.error(`❌ Error saving to ${sheetName}:`, error);

@@ -7,10 +7,28 @@ function ShopFunction({ stockData, workers, setTransactions }) {
   const [showAddItem, setShowAddItem] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [barcodeInput, setBarcodeInput] = useState('');
 
   const selectWorker = (worker) => {
     setSelectedWorker(worker);
     setCart([]);
+  };
+
+  // Handle barcode scanner input
+  const handleBarcodeInput = (value) => {
+    setBarcodeInput(value);
+    
+    // Auto-search when barcode is entered (typically 8-13 digits)
+    if (value.length >= 8) {
+      const item = stockData.find(i => 
+        i.barcode && i.barcode.toLowerCase() === value.toLowerCase()
+      );
+      
+      if (item && item.quantity > 0) {
+        addToCart(item);
+        setBarcodeInput(''); // Clear input after adding
+      }
+    }
   };
 
   const addToCart = (item) => {
@@ -116,11 +134,13 @@ function ShopFunction({ stockData, workers, setTransactions }) {
             }}
           >
             <option value="">Choose a worker</option>
-            {workers.map(worker => (
-              <option key={worker.id} value={worker.id}>
-                {worker.name} ({worker.farmId}){worker.houseNumber ? ` - House ${worker.houseNumber}` : ''}
-              </option>
-            ))}
+            {workers
+              .filter(worker => worker.status !== 'inactive')
+              .map(worker => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.name} ({worker.farmId}){worker.houseNumber ? ` - House ${worker.houseNumber}` : ''}
+                </option>
+              ))}
           </select>
         </div>
 
@@ -169,6 +189,35 @@ function ShopFunction({ stockData, workers, setTransactions }) {
 
       {/* Shopping Cart */}
       {selectedWorker && (
+        <>
+        {/* Barcode Scanner Input */}
+        <div className="card" style={{ marginBottom: '20px', backgroundColor: '#f0f9ff', borderColor: '#2196F3' }}>
+          <div style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <Search size={20} color="#2196F3" />
+              <strong style={{ color: '#2196F3' }}>Barcode Scanner</strong>
+            </div>
+            <input
+              type="text"
+              value={barcodeInput}
+              onChange={(e) => handleBarcodeInput(e.target.value)}
+              placeholder="Scan barcode or type barcode number..."
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '18px',
+                border: '2px solid #2196F3',
+                borderRadius: '8px',
+                fontFamily: 'monospace'
+              }}
+            />
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              💡 Tip: Focus this field and scan barcode - item will be added automatically
+            </small>
+          </div>
+        </div>
+
         <div className="card">
           <div className="card-header">
             <h3>Shopping Cart</h3>
@@ -269,6 +318,7 @@ function ShopFunction({ stockData, workers, setTransactions }) {
             </>
           )}
         </div>
+        </>
       )}
 
       {/* Add Item Modal with Search */}
@@ -332,7 +382,8 @@ function ShopFunction({ stockData, workers, setTransactions }) {
                       const search = searchTerm.toLowerCase();
                       return (
                         item.name.toLowerCase().includes(search) ||
-                        (item.stockCode && item.stockCode.toLowerCase().includes(search))
+                        (item.stockCode && item.stockCode.toLowerCase().includes(search)) ||
+                        (item.barcode && item.barcode.toLowerCase().includes(search))
                       );
                     })
                     .map(item => (

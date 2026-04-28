@@ -34,6 +34,19 @@ const exportToExcel = (data, filename) => {
   document.body.removeChild(link);
 };
 
+// Helper function to round to nearest 5 cents
+const roundToNearest5Cents = (value) => {
+  // Round to nearest 0.05
+  return Math.round(value * 20) / 20;
+};
+
+// Helper function to calculate sell price with 26% markup, rounded to nearest 5 cents
+const calculateSellPrice = (costPrice) => {
+  if (costPrice <= 0) return 0;
+  const withMarkup = costPrice * 1.26;
+  return roundToNearest5Cents(withMarkup);
+};
+
 function StockManagement({ stockData, setStockData }) {
   const [showAddStock, setShowAddStock] = useState(false);
   const [showReceiveStock, setShowReceiveStock] = useState(false);
@@ -42,6 +55,7 @@ function StockManagement({ stockData, setStockData }) {
   const [stockForm, setStockForm] = useState({
     name: '',
     stockCode: '',
+    barcode: '',
     category: '',
     costPrice: 0,
     sellPrice: 0,
@@ -60,6 +74,7 @@ function StockManagement({ stockData, setStockData }) {
   const handleExportStock = () => {
     const exportData = stockData.map(item => ({
       'Stock Code': item.stockCode || '',
+      'Barcode': item.barcode || '',
       'Name': item.name,
       'Category': item.category,
       'Cost Price': 'R ' + (item.costPrice || 0).toFixed(2),
@@ -88,6 +103,7 @@ function StockManagement({ stockData, setStockData }) {
     setStockForm({
       name: '',
       stockCode: '',
+      barcode: '',
       category: '',
       costPrice: 0,
       sellPrice: 0,
@@ -216,6 +232,7 @@ function StockManagement({ stockData, setStockData }) {
           };
           
           const stockCode = getColumn(['id', 'stockcode', 'code', 'stock_code']);
+          const barcode = getColumn(['barcode', 'bar_code', 'ean', 'upc', 'gtin']);
           const name = getColumn(['name', 'item', 'description', 'product']);
           const category = getColumn(['category', 'cat']);
           const costPriceStr = getColumn(['costprice', 'cost_price', 'cost', 'costPrice']);
@@ -232,13 +249,14 @@ function StockManagement({ stockData, setStockData }) {
             continue;
           }
           
-          // Auto-calculate sell price with 26% margin
-          const sellPrice = costPrice > 0 ? parseFloat((costPrice * 1.26).toFixed(2)) : 0;
+          // Auto-calculate sell price with 26% margin, rounded to nearest 5 cents
+          const sellPrice = calculateSellPrice(costPrice);
           
           importedItems.push({
             id: Date.now() + i,
             name: name,
             stockCode: stockCode || '',
+            barcode: barcode || '',
             category: category || '',
             costPrice: costPrice,
             sellPrice: sellPrice,
@@ -418,6 +436,7 @@ function StockManagement({ stockData, setStockData }) {
             <thead>
               <tr>
                 <th>Stock Code</th>
+                <th>Barcode</th>
                 <th>Name</th>
                 <th>Category</th>
                 <th>Cost Price</th>
@@ -432,6 +451,9 @@ function StockManagement({ stockData, setStockData }) {
               {stockData.map(item => (
                 <tr key={item.id}>
                   <td>{item.stockCode || '-'}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+                    {item.barcode || '-'}
+                  </td>
                   <td>{item.name}</td>
                   <td>{item.category}</td>
                   <td>R {(item.costPrice || 0).toFixed(2)}</td>
@@ -500,6 +522,19 @@ function StockManagement({ stockData, setStockData }) {
             </div>
 
             <div className="form-group">
+              <label>Barcode (for scanner)</label>
+              <input
+                type="text"
+                value={stockForm.barcode}
+                onChange={(e) => setStockForm({...stockForm, barcode: e.target.value})}
+                placeholder="e.g., 6001087355322"
+              />
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Optional: Link barcode scanner for quick checkout
+              </small>
+            </div>
+
+            <div className="form-group">
               <label>Category *</label>
               <select
                 value={stockForm.category}
@@ -519,7 +554,7 @@ function StockManagement({ stockData, setStockData }) {
                 value={stockForm.costPrice}
                 onChange={(e) => {
                   const cost = parseFloat(e.target.value) || 0;
-                  const sell = cost > 0 ? parseFloat((cost * 1.26).toFixed(2)) : 0;
+                  const sell = calculateSellPrice(cost);
                   setStockForm({
                     ...stockForm, 
                     costPrice: cost,
@@ -532,7 +567,7 @@ function StockManagement({ stockData, setStockData }) {
             </div>
 
             <div className="form-group">
-              <label>Sell Price * (Auto: Cost + 26%)</label>
+              <label>Sell Price * (Auto: Cost + 26%, rounded to 5c)</label>
               <input
                 type="number"
                 value={stockForm.sellPrice}
@@ -616,6 +651,16 @@ function StockManagement({ stockData, setStockData }) {
             </div>
 
             <div className="form-group">
+              <label>Barcode (for scanner)</label>
+              <input
+                type="text"
+                value={stockForm.barcode}
+                onChange={(e) => setStockForm({...stockForm, barcode: e.target.value})}
+                placeholder="e.g., 6001087355322"
+              />
+            </div>
+
+            <div className="form-group">
               <label>Category *</label>
               <select
                 value={stockForm.category}
@@ -635,7 +680,7 @@ function StockManagement({ stockData, setStockData }) {
                 value={stockForm.costPrice}
                 onChange={(e) => {
                   const cost = parseFloat(e.target.value) || 0;
-                  const sell = cost > 0 ? parseFloat((cost * 1.26).toFixed(2)) : 0;
+                  const sell = calculateSellPrice(cost);
                   setStockForm({
                     ...stockForm, 
                     costPrice: cost,
@@ -647,7 +692,7 @@ function StockManagement({ stockData, setStockData }) {
             </div>
 
             <div className="form-group">
-              <label>Sell Price * (Auto: Cost + 26%)</label>
+              <label>Sell Price * (Auto: Cost + 26%, rounded to 5c)</label>
               <input
                 type="number"
                 value={stockForm.sellPrice}
