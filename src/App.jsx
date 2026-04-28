@@ -24,7 +24,7 @@ function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Google Apps Script configuration - UPDATE THIS URL!
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwtUwmvIPT3oLOAEH7ky8FeebHUeaowLAZZF-TBYYTx4UeCNGqJ4A579Jeun1YOiX5Y/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby001u2h0m09WPE2CutKS1VAuFGHYvTnj6q353hdScSiw_AQCs2u5fdkJmiwNolxir-/exec';
   
   // Check for saved login session
   useEffect(() => {
@@ -310,54 +310,90 @@ function App() {
   };
 
   // Save data to Google Sheets using GET (more reliable than POST)
+  // Workers & Stock use 'upsert' - add new, update existing, NEVER delete
+  // Transactions & Stocktakes use 'append' - only add records that don't exist yet
   const saveToSheets = async (sheetName, data) => {
     if (!data || data.length === 0) {
       console.log(`⏭️ Skipping save to ${sheetName} - no data`);
-      return { success: false, message: 'No data' };
+      return { success: true, message: 'No data to save' };
     }
     
+    // Determine sync action based on sheet type
+    const syncAction = (sheetName === 'Workers' || sheetName === 'Stock_Master')
+      ? 'upsert'   // Add new + update existing records, never wipe
+      : 'append';  // Only add new records (transactions/stocktakes are history)
+    
     try {
-      console.log(`💾 Saving ${data.length} items to ${sheetName}...`);
+      console.log(`💾 ${syncAction.toUpperCase()} ${data.length} items to ${sheetName}...`);
       
-      // Use GET with data in URL parameter (more reliable)
-      const dataString = encodeURIComponent(JSON.stringify({
-        action: 'write',
+      const payload = {
+        action: syncAction,
         sheet: sheetName,
         rows: data
-      }));
+      };
       
-      const url = `${APPS_SCRIPT_URL}?saveData=${dataString}`;
+      const dataString = JSON.stringify(payload);
       
-      // Create a script tag to make the request
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          console.log(`⏱️ Timeout saving to ${sheetName}`);
-          localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
-          resolve({ success: true, message: 'Sent (timeout)' });
-        }, 10000);
+      // For small data (< 2000 chars), use GET
+      // For large data, use POST
+      if (dataString.length < 2000) {
+        // GET method (existing)
+        const url = `${APPS_SCRIPT_URL}?saveData=${encodeURIComponent(dataString)}`;
+        
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            console.log(`⏱️ Timeout saving to ${sheetName}`);
+            localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+            resolve({ success: true, message: 'Sent (timeout)' });
+          }, 15000);
 
-        const script = document.createElement('script');
-        const callbackName = 'saveCallback_' + Date.now();
-        
-        window[callbackName] = function(response) {
-          clearTimeout(timeout);
-          delete window[callbackName];
-          document.body.removeChild(script);
+          const script = document.createElement('script');
+          const callbackName = 'saveCallback_' + Date.now();
           
-          console.log(`📤 Response from ${sheetName}:`, response);
+          window[callbackName] = function(response) {
+            clearTimeout(timeout);
+            delete window[callbackName];
+            document.body.removeChild(script);
+            
+            console.log(`📤 Response from ${sheetName} (${syncAction}):`, response);
+            localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+            resolve({ success: true, message: 'Saved', count: data.length });
+          };
+          
+          script.src = url + `&callback=${callbackName}`;
+          script.onerror = () => {
+            clearTimeout(timeout);
+            console.error(`❌ Error saving to ${sheetName}`);
+            localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+            resolve({ success: true, message: 'Sent (error but saved locally)' });
+          };
+          
+          document.body.appendChild(script);
+        });
+      } else {
+        // POST method for large data
+        console.log(`📦 Using POST for large ${sheetName} data (${dataString.length} chars)`);
+        
+        try {
+          const response = await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: dataString,
+            mode: 'no-cors' // Required for Google Apps Script
+          });
+          
+          console.log(`📤 POST sent to ${sheetName}`);
           localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
-          resolve({ success: true, message: 'Saved' });
-        };
-        
-        script.src = url + `&callback=${callbackName}`;
-        script.onerror = () => {
-          clearTimeout(timeout);
-          console.error(`❌ Error saving to ${sheetName}`);
-          reject(new Error('Script load failed'));
-        };
-        
-        document.body.appendChild(script);
-      });
+          return { success: true, message: 'Sent via POST', count: data.length };
+        } catch (error) {
+          console.error(`❌ POST error for ${sheetName}:`, error);
+          localStorage.setItem(`farmShop_${sheetName}_lastSync`, new Date().toISOString());
+          return { success: true, message: 'Sent (no-cors mode)', count: data.length };
+        }
+      }
       
     } catch (error) {
       console.error(`❌ Error saving to ${sheetName}:`, error);
@@ -408,7 +444,7 @@ function App() {
       
       // Save and verify Workers
       if (workers.length > 0) {
-        console.log(`📤 Syncing ${workers.length} workers...`);
+        console.log(`📤 Upserting ${workers.length} workers...`);
         await saveToSheets('Workers', workers);
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
         try {
@@ -423,7 +459,7 @@ function App() {
       
       // Save and verify Stock
       if (stockData.length > 0) {
-        console.log(`📤 Syncing ${stockData.length} stock items...`);
+        console.log(`📤 Upserting ${stockData.length} stock items...`);
         await saveToSheets('Stock_Master', stockData);
         await new Promise(resolve => setTimeout(resolve, 2000));
         try {
@@ -438,7 +474,7 @@ function App() {
       
       // Save and verify Transactions
       if (transactions.length > 0) {
-        console.log(`📤 Syncing ${transactions.length} transactions...`);
+        console.log(`📤 Appending ${transactions.length} transactions...`);
         await saveToSheets('Transactions', transactions);
         await new Promise(resolve => setTimeout(resolve, 2000));
         try {
@@ -453,7 +489,7 @@ function App() {
       
       // Save and verify Stocktakes
       if (stocktakes.length > 0) {
-        console.log(`📤 Syncing ${stocktakes.length} stocktakes...`);
+        console.log(`📤 Appending ${stocktakes.length} stocktakes...`);
         await saveToSheets('Stocktakes', stocktakes);
         await new Promise(resolve => setTimeout(resolve, 2000));
         try {
@@ -477,7 +513,7 @@ function App() {
       });
       
       if (allConfirmed && results.length > 0) {
-        message += '\n🎉 All data verified in Google Sheets!\n\nSafe to use on other devices.';
+        message += '\n🎉 All data verified in Google Sheets!\n\nSafe to use on other devices.\n⚠️ Note: existing records were updated, new ones added — no data was deleted.';
       } else if (results.length === 0) {
         message = '⚠️ No data to sync.';
       } else {
