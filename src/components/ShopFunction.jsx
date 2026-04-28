@@ -21,12 +21,37 @@ function ShopFunction({ stockData, workers, setTransactions }) {
     // Auto-search when barcode is entered (typically 8-13 digits)
     if (value.length >= 8) {
       const item = stockData.find(i => 
-        i.barcode && i.barcode.toLowerCase() === value.toLowerCase()
+        i.barcode && i.barcode.trim().toLowerCase() === value.trim().toLowerCase()
       );
       
       if (item && item.quantity > 0) {
         addToCart(item);
         setBarcodeInput(''); // Clear input after adding
+      }
+    }
+  };
+
+  // Handle Enter key press on barcode input
+  const handleBarcodeKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      const value = barcodeInput.trim();
+      if (value) {
+        const item = stockData.find(i => 
+          i.barcode && i.barcode.trim().toLowerCase() === value.toLowerCase()
+        );
+        
+        if (item) {
+          if (item.quantity > 0) {
+            addToCart(item);
+            setBarcodeInput('');
+          } else {
+            alert(`${item.name} is out of stock!`);
+            setBarcodeInput('');
+          }
+        } else {
+          alert(`No item found with barcode: ${value}`);
+          setBarcodeInput('');
+        }
       }
     }
   };
@@ -201,6 +226,7 @@ function ShopFunction({ stockData, workers, setTransactions }) {
               type="text"
               value={barcodeInput}
               onChange={(e) => handleBarcodeInput(e.target.value)}
+              onKeyPress={handleBarcodeKeyPress}
               placeholder="Scan barcode or type barcode number..."
               autoFocus
               style={{
@@ -403,7 +429,11 @@ function ShopFunction({ stockData, workers, setTransactions }) {
                         <td>
                           <button
                             className="btn btn-primary"
-                            onClick={() => addToCart(item)}
+                            onClick={() => {
+                              addToCart(item);
+                              setShowAddItem(false);
+                              setSearchTerm('');
+                            }}
                             disabled={item.quantity === 0}
                             style={{ padding: '6px 12px' }}
                           >

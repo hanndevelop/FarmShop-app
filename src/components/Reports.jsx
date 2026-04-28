@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download, User, Calendar, Receipt } from 'lucide-react';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 // Helper function to export to Excel (CSV format)
 const exportToExcel = (data, filename) => {
@@ -38,118 +38,134 @@ const exportToExcel = (data, filename) => {
 
 // Generate Till Slip PDF for a worker
 const generateTillSlipPDF = (worker, transactions, startDate, endDate) => {
-  const doc = new jsPDF();
-  
-  // Header
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text('LOOCK WINKEL', 105, 20, { align: 'center' });
-  
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Worker Purchase Report', 105, 28, { align: 'center' });
-  
-  // Line
-  doc.setLineWidth(0.5);
-  doc.line(20, 32, 190, 32);
-  
-  // Worker details
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Worker Details:', 20, 40);
-  
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Name: ${worker.name}`, 20, 48);
-  doc.text(`Farm ID: ${worker.farmId}`, 20, 55);
-  if (worker.houseNumber) {
-    doc.text(`House: ${worker.houseNumber}`, 20, 62);
+  try {
+    console.log('🧾 Generating PDF for:', worker.name);
+    console.log('📊 Transactions:', transactions.length);
+    
+    if (!transactions || transactions.length === 0) {
+      alert('⚠️ No transactions to include in till slip');
+      return;
+    }
+    
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LOOCK WINKEL', 105, 20, { align: 'center' });
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Worker Purchase Report', 105, 28, { align: 'center' });
+    
+    // Line
+    doc.setLineWidth(0.5);
+    doc.line(20, 32, 190, 32);
+    
+    // Worker details
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Worker Details:', 20, 40);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Name: ${worker.name}`, 20, 48);
+    doc.text(`Farm ID: ${worker.farmId}`, 20, 55);
+    if (worker.houseNumber) {
+      doc.text(`House: ${worker.houseNumber}`, 20, 62);
+    }
+    if (worker.idNumber) {
+      doc.text(`ID Number: ${worker.idNumber}`, 20, worker.houseNumber ? 69 : 62);
+    }
+    
+    // Date range
+    const yPos = worker.houseNumber ? (worker.idNumber ? 76 : 69) : (worker.idNumber ? 69 : 62);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Report Period:', 20, yPos);
+    doc.setFont('helvetica', 'normal');
+    
+    if (startDate && endDate) {
+      doc.text(`${startDate} to ${endDate}`, 20, yPos + 7);
+    } else if (startDate) {
+      doc.text(`From ${startDate}`, 20, yPos + 7);
+    } else if (endDate) {
+      doc.text(`Up to ${endDate}`, 20, yPos + 7);
+    } else {
+      doc.text('All transactions', 20, yPos + 7);
+    }
+    
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-ZA')}`, 20, yPos + 14);
+    
+    // Line
+    doc.line(20, yPos + 18, 190, yPos + 18);
+    
+    // Items table
+    const tableStartY = yPos + 24;
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('ITEMS PURCHASED:', 20, tableStartY);
+    
+    // Prepare table data
+    const tableData = transactions.map(t => [
+      t.itemName,
+      `x${t.quantity}`,
+      `R ${t.total.toFixed(2)}`
+    ]);
+    
+    // Add table
+    doc.autoTable({
+      startY: tableStartY + 4,
+      head: [['Item', 'Qty', 'Amount']],
+      body: tableData,
+      theme: 'plain',
+      styles: {
+        fontSize: 10,
+        cellPadding: 3
+      },
+      headStyles: {
+        fillColor: [148, 0, 45], // BKB Maroon
+        textColor: [255, 255, 255],
+        fontStyle: 'bold'
+      },
+      columnStyles: {
+        0: { cellWidth: 110 },
+        1: { cellWidth: 30, halign: 'center' },
+        2: { cellWidth: 40, halign: 'right' }
+      },
+      margin: { left: 20, right: 20 }
+    });
+    
+    // Total
+    const finalY = doc.lastAutoTable.finalY + 10;
+    
+    doc.setLineWidth(0.5);
+    doc.line(20, finalY, 190, finalY);
+    
+    const total = transactions.reduce((sum, t) => sum + t.total, 0);
+    
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL:', 110, finalY + 8);
+    doc.text(`R ${total.toFixed(2)}`, 170, finalY + 8, { align: 'right' });
+    
+    doc.setLineWidth(1);
+    doc.line(20, finalY + 12, 190, finalY + 12);
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.text('This is a computer-generated document.', 105, 280, { align: 'center' });
+    doc.text('Thank you for your business!', 105, 285, { align: 'center' });
+    
+    // Save
+    const filename = `${worker.name.replace(/\s+/g, '_')}_TillSlip_${new Date().toISOString().split('T')[0]}.pdf`;
+    console.log('💾 Saving PDF:', filename);
+    doc.save(filename);
+    console.log('✅ PDF generated successfully!');
+    
+  } catch (error) {
+    console.error('❌ PDF Generation Error:', error);
+    alert(`Error generating PDF: ${error.message}\n\nMake sure jsPDF is installed:\nnpm install jspdf jspdf-autotable`);
   }
-  if (worker.idNumber) {
-    doc.text(`ID Number: ${worker.idNumber}`, 20, worker.houseNumber ? 69 : 62);
-  }
-  
-  // Date range
-  const yPos = worker.houseNumber ? (worker.idNumber ? 76 : 69) : (worker.idNumber ? 69 : 62);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Report Period:', 20, yPos);
-  doc.setFont('helvetica', 'normal');
-  
-  if (startDate && endDate) {
-    doc.text(`${startDate} to ${endDate}`, 20, yPos + 7);
-  } else if (startDate) {
-    doc.text(`From ${startDate}`, 20, yPos + 7);
-  } else if (endDate) {
-    doc.text(`Up to ${endDate}`, 20, yPos + 7);
-  } else {
-    doc.text('All transactions', 20, yPos + 7);
-  }
-  
-  doc.text(`Generated: ${new Date().toLocaleDateString('en-ZA')}`, 20, yPos + 14);
-  
-  // Line
-  doc.line(20, yPos + 18, 190, yPos + 18);
-  
-  // Items table
-  const tableStartY = yPos + 24;
-  
-  doc.setFont('helvetica', 'bold');
-  doc.text('ITEMS PURCHASED:', 20, tableStartY);
-  
-  // Prepare table data
-  const tableData = transactions.map(t => [
-    t.itemName,
-    `x${t.quantity}`,
-    `R ${t.total.toFixed(2)}`
-  ]);
-  
-  // Add table
-  doc.autoTable({
-    startY: tableStartY + 4,
-    head: [['Item', 'Qty', 'Amount']],
-    body: tableData,
-    theme: 'plain',
-    styles: {
-      fontSize: 10,
-      cellPadding: 3
-    },
-    headStyles: {
-      fillColor: [148, 0, 45], // BKB Maroon
-      textColor: [255, 255, 255],
-      fontStyle: 'bold'
-    },
-    columnStyles: {
-      0: { cellWidth: 110 },
-      1: { cellWidth: 30, halign: 'center' },
-      2: { cellWidth: 40, halign: 'right' }
-    },
-    margin: { left: 20, right: 20 }
-  });
-  
-  // Total
-  const finalY = doc.lastAutoTable.finalY + 10;
-  
-  doc.setLineWidth(0.5);
-  doc.line(20, finalY, 190, finalY);
-  
-  const total = transactions.reduce((sum, t) => sum + t.total, 0);
-  
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL:', 110, finalY + 8);
-  doc.text(`R ${total.toFixed(2)}`, 170, finalY + 8, { align: 'right' });
-  
-  doc.setLineWidth(1);
-  doc.line(20, finalY + 12, 190, finalY + 12);
-  
-  // Footer
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'italic');
-  doc.text('This is a computer-generated document.', 105, 280, { align: 'center' });
-  doc.text('Thank you for your business!', 105, 285, { align: 'center' });
-  
-  // Save
-  const filename = `${worker.name.replace(/\s+/g, '_')}_TillSlip_${new Date().toISOString().split('T')[0]}.pdf`;
-  doc.save(filename);
 };
 
 function Reports({ transactions, workers, stocktakes, stockData }) {

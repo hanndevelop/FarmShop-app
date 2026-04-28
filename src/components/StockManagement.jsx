@@ -88,15 +88,37 @@ function StockManagement({ stockData, setStockData }) {
     exportToExcel(exportData, 'Stock_List');
   };
 
+  // Generate next available stock code
+  const generateNextStockCode = () => {
+    if (stockData.length === 0) return 'LW001';
+    
+    // Get all numeric codes
+    const numericCodes = stockData
+      .map(item => item.stockCode)
+      .filter(code => code && /^LW\d+$/.test(code))
+      .map(code => parseInt(code.replace('LW', '')))
+      .filter(num => !isNaN(num));
+    
+    if (numericCodes.length === 0) return 'LW001';
+    
+    const maxNumber = Math.max(...numericCodes);
+    const nextNumber = maxNumber + 1;
+    return 'LW' + nextNumber.toString().padStart(3, '0');
+  };
+
   const handleAddStock = () => {
     if (!stockForm.name || !stockForm.category) {
       alert('Please fill in at least name and category');
       return;
     }
 
+    // Auto-generate stock code if empty
+    const stockCode = stockForm.stockCode || generateNextStockCode();
+
     const newItem = {
       id: Date.now(),
-      ...stockForm
+      ...stockForm,
+      stockCode: stockCode
     };
 
     setStockData([...stockData, newItem]);
@@ -111,6 +133,24 @@ function StockManagement({ stockData, setStockData }) {
       minQuantity: 5
     });
     setShowAddStock(false);
+  };
+
+  const handleDeleteStock = (itemId) => {
+    const item = stockData.find(i => i.id === itemId);
+    if (!item) return;
+    
+    const confirmDelete = window.confirm(
+      `🗑️ Delete Stock Item?\n\n` +
+      `Name: ${item.name}\n` +
+      `Stock Code: ${item.stockCode || 'N/A'}\n` +
+      `Quantity: ${item.quantity}\n\n` +
+      `This action cannot be undone. Are you sure?`
+    );
+    
+    if (confirmDelete) {
+      const updatedStock = stockData.filter(i => i.id !== itemId);
+      setStockData(updatedStock);
+    }
   };
 
   const handleEditStock = () => {
@@ -129,6 +169,7 @@ function StockManagement({ stockData, setStockData }) {
     setStockForm({
       name: '',
       stockCode: '',
+      barcode: '',
       category: '',
       costPrice: 0,
       sellPrice: 0,
@@ -143,6 +184,7 @@ function StockManagement({ stockData, setStockData }) {
     setStockForm({
       name: item.name,
       stockCode: item.stockCode || '',
+      barcode: item.barcode || '',
       category: item.category,
       costPrice: item.costPrice || 0,
       sellPrice: item.sellPrice || 0,
@@ -467,6 +509,7 @@ function StockManagement({ stockData, setStockData }) {
                         className="btn btn-secondary"
                         onClick={() => openEditModal(item)}
                         style={{ padding: '6px 12px' }}
+                        title="Edit item"
                       >
                         <Edit size={16} />
                       </button>
@@ -477,6 +520,14 @@ function StockManagement({ stockData, setStockData }) {
                         title="Quick add stock"
                       >
                         <Plus size={16} />
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => handleDeleteStock(item.id)}
+                        style={{ padding: '6px 12px', backgroundColor: '#c62828', color: 'white' }}
+                        title="Delete item"
+                      >
+                        <X size={16} />
                       </button>
                     </div>
                   </td>
@@ -512,13 +563,16 @@ function StockManagement({ stockData, setStockData }) {
             </div>
 
             <div className="form-group">
-              <label>Stock Code</label>
+              <label>Stock Code (optional)</label>
               <input
                 type="text"
                 value={stockForm.stockCode}
                 onChange={(e) => setStockForm({...stockForm, stockCode: e.target.value})}
-                placeholder="e.g., MM5KG"
+                placeholder={`Auto: ${generateNextStockCode()}`}
               />
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Leave empty to auto-generate (e.g., {generateNextStockCode()})
+              </small>
             </div>
 
             <div className="form-group">
