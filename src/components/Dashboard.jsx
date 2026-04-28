@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { AlertCircle, Package, TrendingDown, Users, DollarSign, ShoppingBag, TrendingUp, RefreshCw, Cloud } from 'lucide-react';
 
-function Dashboard({ stockData, transactions, onForceSync }) {
+function Dashboard({ stockData, transactions, onForceSync, onPullFromSheets }) {
   const [dateFilter, setDateFilter] = useState({
     startDate: '',
     endDate: ''
   });
   const [syncing, setSyncing] = useState(false);
+  const [pulling, setPulling] = useState(false);
 
   // Get last sync times from localStorage
   const getLastSyncTime = (sheetName) => {
@@ -30,6 +31,14 @@ function Dashboard({ stockData, transactions, onForceSync }) {
       await onForceSync();
     }
     setSyncing(false);
+  };
+
+  const handlePull = async () => {
+    setPulling(true);
+    if (onPullFromSheets) {
+      await onPullFromSheets();
+    }
+    setPulling(false);
   };
 
   // Filter transactions by date
@@ -107,15 +116,28 @@ function Dashboard({ stockData, transactions, onForceSync }) {
               Last sync: {getLastSyncTime('Workers')}
             </div>
           </div>
-          <button 
-            className="btn btn-primary"
-            onClick={handleSync}
-            disabled={syncing}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <RefreshCw size={16} className={syncing ? 'spinning' : ''} />
-            {syncing ? 'Syncing...' : 'Sync Now'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={handlePull}
+              disabled={pulling || syncing}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}
+              title="Pull new records added directly in Google Sheets into this device"
+            >
+              <RefreshCw size={15} className={pulling ? 'spinning' : ''} />
+              {pulling ? 'Pulling...' : '⬇️ Pull from Sheets'}
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleSync}
+              disabled={syncing || pulling}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}
+              title="Push this device's data up to Google Sheets"
+            >
+              <RefreshCw size={15} className={syncing ? 'spinning' : ''} />
+              {syncing ? 'Syncing...' : '⬆️ Push to Sheets'}
+            </button>
+          </div>
         </div>
       </div>
 

@@ -24,7 +24,7 @@ function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Google Apps Script configuration - UPDATE THIS URL!
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby001u2h0m09WPE2CutKS1VAuFGHYvTnj6q353hdScSiw_AQCs2u5fdkJmiwNolxir-/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwyCNFbJOY_5Bn9IrFXUx9bKGvDp70NfKv4KftHk2aGR5rA7LMCxsI2OZSW1NFQJt27/exec';
   
   // Check for saved login session
   useEffect(() => {
@@ -246,6 +246,78 @@ function App() {
     setDataLoaded(true);
     console.log('✅ Data load complete!');
   };
+
+  // Pull latest data from Sheets and merge into local state
+  // This is how workers/stock added directly in Google Sheets get into the app
+  const pullFromSheets = async (silent = false) => {
+    if (!silent) console.log('⬇️ Pulling latest data from Google Sheets...');
+    let pulled = { workers: 0, stock: 0 };
+    try {
+      try {
+        const workersResult = await loadFromSheets('Workers');
+        if (workersResult.status === 'success' && workersResult.data.length > 0) {
+          pulled.workers = workersResult.data.length;
+          setWorkers(prev => {
+            const sheetsKeys = new Set(workersResult.data.map(i => String(i['farmId'])));
+            const localOnly = prev.filter(i => !sheetsKeys.has(String(i['farmId'])));
+            const merged = [...workersResult.data, ...localOnly];
+            localStorage.setItem('farmShop_Workers', JSON.stringify(merged));
+            return merged;
+          });
+        }
+      } catch (e) { console.error('Pull workers error:', e); }
+
+      try {
+        const stockResult = await loadFromSheets('Stock_Master');
+        if (stockResult.status === 'success' && stockResult.data.length > 0) {
+          pulled.stock = stockResult.data.length;
+          setStockData(prev => {
+            const sheetsKeys = new Set(stockResult.data.map(i => String(i['id'])));
+            const localOnly = prev.filter(i => !sheetsKeys.has(String(i['id'])));
+            const merged = [...stockResult.data, ...localOnly];
+            localStorage.setItem('farmShop_Stock', JSON.stringify(merged));
+            return merged;
+          });
+        }
+      } catch (e) { console.error('Pull stock error:', e); }
+
+      try {
+        const transResult = await loadFromSheets('Transactions');
+        if (transResult.status === 'success' && transResult.data.length > 0) {
+          setTransactions(prev => {
+            const sheetsKeys = new Set(transResult.data.map(i => String(i['id'])));
+            const localOnly = prev.filter(i => !sheetsKeys.has(String(i['id'])));
+            return [...transResult.data, ...localOnly];
+          });
+        }
+      } catch (e) { console.error('Pull transactions error:', e); }
+
+      localStorage.setItem('farmShop_Workers_lastPull', new Date().toISOString());
+      if (!silent) {
+        alert(`✅ Pull from Sheets complete!
+
+☁️ Workers in Sheets: ${pulled.workers}
+☁️ Stock in Sheets: ${pulled.stock}
+
+Any records added directly in Google Sheets are now on this device.`);
+      }
+    } catch (error) {
+      console.error('Pull error:', error);
+      if (!silent) alert(`❌ Pull failed.
+
+Check internet connection and try again.`);
+    }
+  };
+
+  // Background auto-pull every 5 minutes while app is open
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const interval = setInterval(() => {
+      console.log('🔄 Background pull from Sheets...');
+      pullFromSheets(true);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [dataLoaded]);
 
   // Merge function - combines local and sheets data, preferring sheets when both exist
   const mergeData = (localData, sheetsData, uniqueKey) => {
@@ -540,7 +612,7 @@ function App() {
   const renderContent = () => {
     switch(activeTab) {
       case 'dashboard':
-        return <Dashboard stockData={stockData} transactions={transactions} onForceSync={forceSync} />;
+        return <Dashboard stockData={stockData} transactions={transactions} onForceSync={forceSync} onPullFromSheets={() => pullFromSheets(false)} />;
       case 'stock':
         return <StockManagement stockData={stockData} setStockData={setStockData} />;
       case 'shop':
@@ -552,7 +624,7 @@ function App() {
       case 'reports':
         return <Reports transactions={transactions} workers={workers} stocktakes={stocktakes} stockData={stockData} />;
       default:
-        return <Dashboard stockData={stockData} transactions={transactions} onForceSync={forceSync} />;
+        return <Dashboard stockData={stockData} transactions={transactions} onForceSync={forceSync} onPullFromSheets={() => pullFromSheets(false)} />;
     }
   };
 
