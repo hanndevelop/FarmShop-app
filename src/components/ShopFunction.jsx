@@ -1,15 +1,59 @@
 import React, { useState } from 'react';
-import { Plus, X, ShoppingCart, User, Search } from 'lucide-react';
+import { Plus, X, ShoppingCart, User, Search, Calendar } from 'lucide-react';
 
 function ShopFunction({ stockData, workers, setTransactions }) {
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [cart, setCart] = useState([]);
   const [showAddItem, setShowAddItem] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [barcodeInput, setBarcodeInput] = useState('');
 
   const selectWorker = (worker) => {
     setSelectedWorker(worker);
     setCart([]);
+  };
+
+  // Handle barcode scanner input
+  const handleBarcodeInput = (value) => {
+    setBarcodeInput(value);
+    
+    // Auto-search when barcode is entered (typically 8-13 digits)
+    if (value.length >= 8) {
+      const item = stockData.find(i => 
+        i.barcode && i.barcode.trim().toLowerCase() === value.trim().toLowerCase()
+      );
+      
+      if (item && item.quantity > 0) {
+        addToCart(item);
+        setBarcodeInput(''); // Clear input after adding
+      }
+    }
+  };
+
+  // Handle Enter key press on barcode input
+  const handleBarcodeKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      const value = barcodeInput.trim();
+      if (value) {
+        const item = stockData.find(i => 
+          i.barcode && i.barcode.trim().toLowerCase() === value.toLowerCase()
+        );
+        
+        if (item) {
+          if (item.quantity > 0) {
+            addToCart(item);
+            setBarcodeInput('');
+          } else {
+            alert(`${item.name} is out of stock!`);
+            setBarcodeInput('');
+          }
+        } else {
+          alert(`No item found with barcode: ${value}`);
+          setBarcodeInput('');
+        }
+      }
+    }
   };
 
   const addToCart = (item) => {
@@ -76,7 +120,7 @@ function ShopFunction({ stockData, workers, setTransactions }) {
 
     const newTransactions = cart.map(item => ({
       id: Date.now() + Math.random(),
-      date: new Date().toISOString().split('T')[0],
+      date: invoiceDate, // Use selected invoice date
       workerId: selectedWorker.id,
       workerName: selectedWorker.name,
       itemId: item.id,
@@ -88,9 +132,10 @@ function ShopFunction({ stockData, workers, setTransactions }) {
 
     setTransactions(prevTransactions => [...prevTransactions, ...newTransactions]);
     
-    alert(`Transaction completed!\nWorker: ${selectedWorker.name}\nTotal: R ${calculateTotal().toFixed(2)}`);
+    alert(`Transaction completed!\nWorker: ${selectedWorker.name}\nDate: ${invoiceDate}\nTotal: R ${calculateTotal().toFixed(2)}`);
     
     setCart([]);
+    setInvoiceDate(new Date().toISOString().split('T')[0]); // Reset to today
   };
 
   return (
@@ -114,11 +159,13 @@ function ShopFunction({ stockData, workers, setTransactions }) {
             }}
           >
             <option value="">Choose a worker</option>
-            {workers.map(worker => (
-              <option key={worker.id} value={worker.id}>
-                {worker.name} ({worker.farmId})
-              </option>
-            ))}
+            {workers
+              .filter(worker => worker.status === 'active')
+              .map(worker => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.name} ({worker.farmId}){worker.houseNumber ? ` - House ${worker.houseNumber}` : ''}
+                </option>
+              ))}
           </select>
         </div>
 
@@ -128,13 +175,74 @@ function ShopFunction({ stockData, workers, setTransactions }) {
             <div>
               <strong>{selectedWorker.name}</strong>
               <div style={{ fontSize: '14px' }}>Farm ID: {selectedWorker.farmId}</div>
+              {selectedWorker.houseNumber && (
+                <div style={{ fontSize: '14px' }}>House Number: {selectedWorker.houseNumber}</div>
+              )}
             </div>
           </div>
         )}
       </div>
 
+      {/* Invoice Date Selection */}
+      {selectedWorker && (
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <div className="card-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={20} />
+              <h3>Invoice Date</h3>
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Transaction Date (for backdating)</label>
+            <input
+              type="date"
+              value={invoiceDate}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+              max={new Date().toISOString().split('T')[0]} // Can't select future dates
+            />
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Selected date: {new Date(invoiceDate).toLocaleDateString('en-ZA', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </small>
+          </div>
+        </div>
+      )}
+
       {/* Shopping Cart */}
       {selectedWorker && (
+        <>
+        {/* Barcode Scanner Input */}
+        <div className="card" style={{ marginBottom: '20px', backgroundColor: '#f0f9ff', border: '2px solid #2196F3' }}>
+          <div style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <Search size={20} color="#2196F3" />
+              <strong style={{ color: '#2196F3' }}>Barcode Scanner</strong>
+            </div>
+            <input
+              type="text"
+              value={barcodeInput}
+              onChange={(e) => handleBarcodeInput(e.target.value)}
+              onKeyPress={handleBarcodeKeyPress}
+              placeholder="Scan barcode or type barcode number..."
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '18px',
+                border: '2px solid #2196F3',
+                borderRadius: '8px',
+                fontFamily: 'monospace'
+              }}
+            />
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              💡 Tip: Focus this field and scan barcode - item will be added automatically
+            </small>
+          </div>
+        </div>
+
         <div className="card">
           <div className="card-header">
             <h3>Shopping Cart</h3>
@@ -215,7 +323,15 @@ function ShopFunction({ stockData, workers, setTransactions }) {
                 </table>
               </div>
 
-              <div style={{ marginTop: '24px', textAlign: 'right' }}>
+              <div style={{ marginTop: '24px', textAlign: 'right', display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                    Invoice Date: {new Date(invoiceDate).toLocaleDateString()}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#666' }}>
+                    {cart.length} item{cart.length !== 1 ? 's' : ''} • R {calculateTotal().toFixed(2)}
+                  </div>
+                </div>
                 <button 
                   className="btn btn-primary"
                   onClick={completeTransaction}
@@ -227,6 +343,7 @@ function ShopFunction({ stockData, workers, setTransactions }) {
             </>
           )}
         </div>
+        </>
       )}
 
       {/* Add Item Modal with Search */}
@@ -290,7 +407,8 @@ function ShopFunction({ stockData, workers, setTransactions }) {
                       const search = searchTerm.toLowerCase();
                       return (
                         item.name.toLowerCase().includes(search) ||
-                        (item.stockCode && item.stockCode.toLowerCase().includes(search))
+                        (item.stockCode && item.stockCode.toLowerCase().includes(search)) ||
+                        (item.barcode && item.barcode.toLowerCase().includes(search))
                       );
                     })
                     .map(item => (
@@ -310,7 +428,11 @@ function ShopFunction({ stockData, workers, setTransactions }) {
                         <td>
                           <button
                             className="btn btn-primary"
-                            onClick={() => addToCart(item)}
+                            onClick={() => {
+                              addToCart(item);
+                              setShowAddItem(false);
+                              setSearchTerm('');
+                            }}
                             disabled={item.quantity === 0}
                             style={{ padding: '6px 12px' }}
                           >

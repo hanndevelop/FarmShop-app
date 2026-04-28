@@ -43,10 +43,11 @@ function App() {
   }, [isLoggedIn]);
 
   // Auto-save workers (to BOTH localStorage AND Sheets)
+  // Note: no workers.length guard — we must save even when list is empty (e.g. after delete)
   useEffect(() => {
-    if (dataLoaded && workers.length > 0) {
+    if (dataLoaded) {
       localStorage.setItem('farmShop_Workers', JSON.stringify(workers));
-      saveToSheets('Workers', workers);
+      if (workers.length >= 0) saveToSheets('Workers', workers);
     }
   }, [workers, dataLoaded]);
 
@@ -196,8 +197,10 @@ function App() {
       console.error('Error loading from Sheets:', error);
     }
 
-    // STEP 3: MERGE data (keep most recent based on ID)
-    const mergedWorkers = mergeData(localWorkersData, sheetsWorkersData, 'farmId');
+    // STEP 3: MERGE data
+    // Workers: Sheets is source of truth — use Sheets data if available, else fall back to local
+    // This ensures deleted workers (removed from Sheets by write action) don't come back from localStorage
+    const mergedWorkers = sheetsWorkersData.length > 0 ? sheetsWorkersData : localWorkersData;
     const mergedStock = mergeData(localStockData, sheetsStockData, 'id');
     const mergedTransactions = mergeData(localTransactionsData, sheetsTransactionsData, 'id');
     const mergedStocktakes = mergeData(localStocktakesData, sheetsStocktakesData, 'id');
