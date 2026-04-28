@@ -359,17 +359,7 @@ function Reports({ transactions, workers, stocktakes, stockData }) {
   // Worker Detail Report (with PDF Till Slip option)
   const renderWorkerDetail = () => {
     const worker = workers.find(w => w.id === parseInt(selectedWorker));
-    
-    if (!worker) {
-      return (
-        <div className="alert alert-info">
-          <User size={20} />
-          <p>Please select a worker to view their transaction details</p>
-        </div>
-      );
-    }
-
-    const workerTransactions = filteredTransactions.filter(t => t.workerId === worker.id);
+    const workerTransactions = worker ? filteredTransactions.filter(t => t.workerId === worker.id) : [];
     const total = workerTransactions.reduce((sum, t) => sum + t.total, 0);
 
     const exportData = workerTransactions.map(t => ({
@@ -382,6 +372,7 @@ function Reports({ transactions, workers, stocktakes, stockData }) {
 
     return (
       <div>
+        {/* ALWAYS show dropdown and date filters */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '4px' }}>
@@ -427,19 +418,27 @@ function Reports({ transactions, workers, stocktakes, stockData }) {
           </div>
         </div>
 
-        {worker && workerTransactions.length > 0 && (
+        {/* Show buttons if worker selected */}
+        {worker && (
           <div style={{ marginBottom: '16px', display: 'flex', gap: '12px' }}>
             <button
               className="btn btn-primary"
               onClick={() => exportToExcel(exportData, `${worker.name.replace(/\s+/g, '_')}_Transactions`)}
+              disabled={workerTransactions.length === 0}
+              style={{ opacity: workerTransactions.length === 0 ? 0.5 : 1 }}
             >
               <Download size={16} />
               Export to Excel
             </button>
             <button
               className="btn"
-              style={{ backgroundColor: '#94002D', color: 'white' }}
+              style={{ 
+                backgroundColor: '#94002D', 
+                color: 'white',
+                opacity: workerTransactions.length === 0 ? 0.5 : 1
+              }}
               onClick={() => generateTillSlipPDF(worker, workerTransactions, startDate, endDate)}
+              disabled={workerTransactions.length === 0}
             >
               <Receipt size={16} />
               Generate Till Slip PDF
@@ -447,43 +446,62 @@ function Reports({ transactions, workers, stocktakes, stockData }) {
           </div>
         )}
 
-        <div className="alert alert-info" style={{ marginBottom: '16px' }}>
-          <User size={20} />
-          <div>
-            <strong>{worker.name}</strong>
-            <div style={{ fontSize: '14px' }}>Farm ID: {worker.farmId}</div>
-            {worker.houseNumber && <div style={{ fontSize: '14px' }}>House: {worker.houseNumber}</div>}
+        {/* Show message if no worker selected */}
+        {!worker && (
+          <div className="alert alert-info">
+            <User size={20} />
+            <p>Please select a worker to view their transaction details</p>
           </div>
-        </div>
+        )}
 
-        <div style={{ overflowX: 'auto' }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Item</th>
-                <th>Quantity</th>
-                <th>Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {workerTransactions.map(t => (
-                <tr key={t.id}>
-                  <td>{t.date}</td>
-                  <td>{t.itemName}</td>
-                  <td>{t.quantity}</td>
-                  <td>R {t.price.toFixed(2)}</td>
-                  <td>R {t.total.toFixed(2)}</td>
-                </tr>
-              ))}
-              <tr style={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
-                <td colSpan="4" style={{ textAlign: 'right' }}>TOTAL:</td>
-                <td>R {total.toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {/* Show worker info and transactions if worker selected */}
+        {worker && (
+          <>
+            <div className="alert alert-info" style={{ marginBottom: '16px' }}>
+              <User size={20} />
+              <div>
+                <strong>{worker.name}</strong>
+                <div style={{ fontSize: '14px' }}>Farm ID: {worker.farmId}</div>
+                {worker.houseNumber && <div style={{ fontSize: '14px' }}>House: {worker.houseNumber}</div>}
+              </div>
+            </div>
+
+            {workerTransactions.length === 0 ? (
+              <div className="alert alert-info">
+                <p>No transactions found for this worker in the selected date range.</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Item</th>
+                      <th>Quantity</th>
+                      <th>Price</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workerTransactions.map(t => (
+                      <tr key={t.id}>
+                        <td>{t.date}</td>
+                        <td>{t.itemName}</td>
+                        <td>{t.quantity}</td>
+                        <td>R {t.price.toFixed(2)}</td>
+                        <td>R {t.total.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
+                      <td colSpan="4" style={{ textAlign: 'right' }}>TOTAL:</td>
+                      <td>R {total.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
     );
   };
